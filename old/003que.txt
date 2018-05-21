@@ -1,0 +1,11 @@
+xx9x8xxxx
+xxxxx3xxx
+xx26xxx15
+xx65xxx3x
+9xxxxxxx6
+x4xxx79xx
+57xxx42xx
+xxx2xxxxx
+xxxx1x8xx
+
+至少需要显式规则level5或者隐式规则level2。

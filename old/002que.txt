@@ -1,0 +1,11 @@
+89x17xxxx
+6x49xxx8x
+xxxxxx6xx
+xxxxx243x
+x3x4x8x1x
+x127xxxxx
+xx9xxxxxx
+x5xxx79x4
+xxxx69x27
+
+稍微复杂一点儿，用隐式规则level1可以解决；但如果只用显式规则，则需要level3。

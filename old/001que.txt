@@ -1,0 +1,11 @@
+xx83x91xx
+9xxx6xxx4
+xx75x48xx
+x36xxx54x
+xx1xxx6xx
+x42xxx97x
+xx59x73xx
+6xxx1xxx8
+xx46x82xx
+
+非常简单的题目，用显式规则level1就能求解。

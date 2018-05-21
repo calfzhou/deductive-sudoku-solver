@@ -1,0 +1,11 @@
+2x8xx6xx7
+xxxxxxx8x
+97xxxxx14
+527xx31xx
+xxxx9xxxx
+xx61xx453
+15xxxxx49
+x6xxxxxxx
+7xx3xx5x6
+
+若只用显式规则，需要level3；若只用隐式规则，需要level4。

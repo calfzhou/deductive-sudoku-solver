@@ -1,0 +1,11 @@
+xx2xxx7xx
+9xxxxxxx6
+x7x9x5x4x
+xx48x21xx
+x9xxxxx8x
+xx86x74xx
+x5x3x8x7x
+2xxxxxxx5
+xx7xxx6xx
+
+此题需要使用链列规则level2，配以显式规则level2或者隐式规则level2或同时使用显式规则level1和隐式规则level1。
