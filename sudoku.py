@@ -1,7 +1,9 @@
 #/usr/bin/env python3
 import argparse
-from enum import auto, Enum, Flag
+import string
 import sys
+from enum import Enum, Flag, auto
+from typing import List, Tuple
 
 
 class AreaType(Enum):
@@ -19,77 +21,84 @@ class OperationRange(Flag):
 
 
 class Coord:
-    def __init__(self, row, col):
-        """
-        :type row: int
-        :param col: vertical coord, from top to bottom, starting from 0
-        :type col: int
-        :param row: horizontal coord, from left to right, staring from 0
-        """
+    def __init__(self, row: int, col: int):
         self._row = row
         self._col = col
 
     @property
-    def row(self):
+    def row(self) -> int:
         return self._row
 
     @property
-    def col(self):
+    def col(self) -> int:
         return self._col
 
     def __str__(self):
-        return f'({self.row + 1}, {self.col + 1})'
+        return f'({self._row + 1}, {self.col + 1})'
 
 
 class Area:
-    def __init__(self, start, end):
-        """
-        :type start: Coord
-        :type end: Coord
-        """
+    def __init__(self, start: Coord, end: Coord):
         self._start = start
         self._end = end
 
     @property
-    def row_start(self):
+    def row_start(self) -> int:
         return self._start.row
 
     @property
-    def row_end(self):
-        return self._end.col
+    def row_end(self) -> int:
+        return self._end.row
 
     @property
-    def col_start(self):
+    def col_start(self) -> int:
         return self._start.col
 
     @property
-    def col_end(self):
+    def col_end(self) -> int:
         return self._end.col
 
-    def __contains__(self, coord):
+    def __contains__(self, coord: Coord):
         return self.row_start <= coord.row < self.row_end and self.col_start <= coord.col < self.col_end
 
 
 class CandidateSet:
-    def __init__(self, size=0):
+    def __init__(self, size: int = 0):
         self._size = size
         self._data = self._mask(size) - 1
 
     @staticmethod
-    def _mask(value):
+    def _mask(value: int) -> int:
         return 1 << value
 
-    def set(self, value):
+    def set(self, value: int):
         self._data = self._mask(value)
 
-    # def reset(self):
-    #     self._data = self._mask(self._size) - 1
+    def retain(self, value: int):
+        self._data &= self._mask(value)
+
+    def add(self, value: int):
+        self._data |= self._mask(value)
+
+    def remove(self, value: int):
+        self &= ~self._mask(value)
+
+    def first(self) -> int:
+        for value in self:
+            return value
+
+        return None
+
+    def copy(self):
+        new = CandidateSet(self._size)
+        new._data = self._data
+        return new
 
     def __len__(self):
         # TODO: Can be refined.
-        return len(v for v in self)
+        return len([v for v in self])
 
-    def __contains__(self, value):
+    def __contains__(self, value: int):
         return bool(self._data & self._mask(value))
 
     def __iter__(self):
@@ -102,22 +111,14 @@ class CandidateSet:
             data >>= 1
             value += 1
 
-    def add(self, value):
-        self._data |= self._mask(value)
-
-    def remove(self, value):
-        self._data &= ~self._mask(value)
-
-    def copy(self):
-        new = CandidateSet(self._size)
-        new._data = self._data
-        return new
-
     def __iand__(self, other):
-        if not isinstance(other, CandidateSet):
-            raise TypeError(f'cannot execute &= with {type(other)}')
+        if isinstance(other, CandidateSet):
+            self._data &= other._data
+        # elif isinstance(other, int):
+        #     self._data &= self._mask(other)
+        else:
+            raise TypeError(f'cannot &= with {type(other)}')
 
-        self._data &= other._data
         return self
 
     def __and__(self, other):
@@ -125,11 +126,29 @@ class CandidateSet:
         new &= other
         return new
 
-    def __isub__(self, other):
-        if not isinstance(other, CandidateSet):
-            raise TypeError(f'cannot execute -= with {type(other)}')
+    def __ior__(self, other):
+        if isinstance(other, CandidateSet):
+            self._data |= other._data
+        # elif isinstance(other, int):
+        #     self._data |= self._mask(other)
+        else:
+            raise TypeError(f'cannot |= with {type(other)}')
 
-        self._data &= ~other._data
+        return self
+
+    def __or__(self, other):
+        new = self.copy()
+        new |= other
+        return new
+
+    def __isub__(self, other):
+        if isinstance(other, CandidateSet):
+            self._data &= ~other._data
+        # elif isinstance(other, int):
+        #     self._data &= ~self._mask(other)
+        else:
+            raise TypeError(f'cannot -= with {type(other)}')
+
         return self
 
     def __sub__(self, other):
@@ -139,111 +158,112 @@ class CandidateSet:
 
 
 class Cell:
-    def __init__(self, row, col, size):
+    def __init__(self, row: int, col: int, size: int):
         self._coord = Coord(row, col)
-        self._value = None
+        self._value: int = None
         self._candidates = CandidateSet(size)
 
     @property
-    def coord(self):
+    def coord(self) -> Coord:
         return self._coord
 
     @property
-    def confirmed(self):
+    def confirmed(self) -> bool:
         return self._value is not None
 
     @property
-    def value(self):
-        # if not self.confirmed:
-        #     raise AttributeError('cell value is not confirmed')
+    def value(self) -> int:
         return self._value
 
     @value.setter
-    def value(self, value):
-        if value is None:
-            raise ValueError('cannot set cell value to None')
-
+    def value(self, value: int):
         self._value = value
-        self._candidates.set(value)
+        if value is not None:
+            self._candidates.set(value)
 
     @property
-    def candidates(self):
+    def candidates(self) -> CandidateSet:
         return self._candidates
 
-    def is_possible(self, value):
+    def is_possible(self, value: int) -> bool:
         return value in self._candidates
 
-    def intersection_candidates(self, candidates):
+    def intersection_candidates(self, candidates: CandidateSet):
         self._candidates &= candidates
 
-    def difference_candidates(self, candidates):
+    def difference_candidates(self, candidates: CandidateSet):
         self._candidates -= candidates
 
     def __str__(self):
         if self.confirmed:
-            return f'{self.coord}{self._value}'
+            return f'{self._coord}{self._value}'
         else:
-            return f'{self.coord}[{self._candidates:x}]'
+            return f'{self._coord}[{self._candidates}]'
 
 
+# Cell 不做逻辑检查，直接接受指令并操作。
+# Board 做单个cell的逻辑检查，但不做cell之间的逻辑判定。
 class Board:
-    def __init__(self, block_width=3, block_height=3):
-        """
-        :type block_width: int
-        :type block_height: int
-        """
+    def __init__(self, block_width: int = 3, block_height: int = 3):
         self._block_width = block_width
         self._block_height = block_height
         self._size = block_width * block_height
-        self._mapping = '123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-        self._cells = [Cell(r, c, self._size) for r in range(self._size) for c in range(self._size)]
+        self._mapping = f'123456789{string.ascii_uppercase}'
+        self._cells : List[Cell] = [Cell(r, c, self._size) for r in range(self._size) for c in range(self._size)]
         self._confirmed_count = 0
 
-    def confirm(self, coord, value):
-        """
-        :type coord: Coord
-        :type value: int
+    def acknowledge_cell_value(self, coord: Coord, value: int):
+        """Remove cell's candidates except the given one.
+        Confirmed cell cannot be acknowledged to different value.
+        Will NOT confirm the cell.
         """
         if value is None:
-            raise ValueError('cannot confirm None to a cell')
+            raise ValueError('cannot acknowledge None to a cell')
 
-        cell = self[coord]
-        if not cell.is_possible(value):
-            raise ValueError
+        cell: Cell = self[coord]
+        if cell.confirmed and cell.value != value:
+            raise ValueError('cannot acknowledge different value to a confirmed cell')
 
-        if cell.confirm:
+        cell.candidates.retain(value)
+
+    def confirm_cell(self, coord: Coord):
+        """Confirm cell's single candidate.
+        Will FAIL if the cell has no candidate, or more than two candidates.
+        Will NOT update other cells' candidates.
+        """
+        cell: Cell = self[coord]
+        if cell.confirmed:
             return
 
-        cell.value = value
+        if len(cell.candidates) != 1:
+            raise ValueError('cannot confirm a cell with 0 candidate or 2+ candidates')
+
+        cell.value = cell.candidates.first()
         self._confirmed_count += 1
-        # remove candidate for surroundings
 
     @property
-    def block_width(self):
+    def block_width(self) -> int:
         return self._block_width
 
     @property
-    def block_height(self):
+    def block_height(self) -> int:
         return self._block_height
 
     @property
-    def size(self):
+    def size(self) -> int:
         return self._size
 
     @property
-    def blocks_per_row(self):
+    def blocks_per_row(self) -> int:
         return self._block_height
 
     @property
-    def blocks_per_col(self):
+    def blocks_per_col(self) -> int:
         return self._block_width
 
-    def get_area(self, coord, area_type):
-        """
-        :type coord: Coord
-        :type area_type: AreaType
-        :rtype: Area
-        """
+    def get_area(self, coord: Coord, area_type: AreaType) -> Area:
+        start: Coord
+        end: Coord
         if area_type == area_type.ROW:
             start = Coord(coord.row, 0)
             end = Coord(coord.row + 1, self._size)
@@ -259,12 +279,7 @@ class Board:
 
         return Area(start, end)
 
-    def get_common_area(self, coords, area_type):
-        """
-        :type coords: list[Coord]
-        :type area_type: AreaType
-        :rtype: Area | None
-        """
+    def get_common_area(self, coords: List[Coord], area_type: AreaType) -> Area:
         coord_iter = iter(coords)
         coord = next(coord_iter, None)
         if coord is None:
@@ -277,18 +292,15 @@ class Board:
 
         return area
 
-    def intersection_candidates(self, coords, candidates):
-        pass
-
-    def mark(self, value):
+    def mark(self, value: int) -> str:
         return self._mapping[value]
 
-    def _to_index(self, row, col):
+    def _to_index(self, row: int, col: int) -> int:
         assert 0 <= row < self._size, f'row {row} out of range'
         assert 0 <= col < self._size, f'col {col} out of range'
         return row * self._size + col
 
-    def _to_row_col(self, index):
+    def _to_row_col(self, index: int) -> Tuple[int, int]:
         assert 0 <= index < self._size * self._size, f'index {index} out of range'
         return divmod(index, self._size)
 
@@ -296,10 +308,7 @@ class Board:
         if not (0 <= coord.row < self._size and 0 <= coord.col < self._size):
             raise ValueError(f'coord {coord} out of range')
 
-    def __getitem__(self, coord):
-        """
-        :rtype: Cell
-        """
+    def __getitem__(self, coord: Coord) -> Cell:
         if isinstance(coord, (tuple, list)):
             coord = Coord(*coord)
 
@@ -366,7 +375,10 @@ class Board:
                     cell = self[row, col]
                     for sub_col in range(self.block_width):
                         value = sub_row * self.block_width + sub_col
-                        sub_cell_text = self.mark(value) if cell.is_possible(value) else ' '
+                        if cell.is_possible(value):
+                            sub_cell_text = self.mark(value)
+                        else:
+                            sub_cell_text = '*' if cell.confirmed else ' '
                         print(f' {sub_cell_text}', file=output, end='')
                     print(' |' if is_major_col else ' :', file=output, end='')
                 print(file=output)
@@ -376,6 +388,10 @@ class Board:
 
 def test():
     board = Board(3, 3)
+    board.acknowledge_cell_value((1, 2), 1)
+    board.acknowledge_cell_value((2, 5), 7)
+    board.acknowledge_cell_value((4, 3), 6)
+    board.confirm_cell((4, 3))
     board.print_simple(sys.stdout)
     board.print_confirmed(sys.stdout)
     board.print_with_candidates(sys.stdout)
