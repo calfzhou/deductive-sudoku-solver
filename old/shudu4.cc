@@ -220,7 +220,7 @@ class ShuduSolver {
               cout << Num2Char(val);
             } else {
             //   cout << (marked ? "■" : "");
-              cout << (marked ? "#" : "");
+              cout << (marked ? "*" : "");
             }
           }
         //   cout << (yy % BLOCKY == 0 ? "┃" : "│");

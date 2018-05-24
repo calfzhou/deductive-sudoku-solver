@@ -83,11 +83,10 @@ class CandidateSet:
     def remove(self, value: int):
         self &= ~self._mask(value)
 
-    def first(self) -> int:
-        for value in self:
-            return value
-
-        return None
+    def peek(self) -> int:
+        """Returns a possible candidate value."""
+        value = self._data.bit_length() - 1
+        return value if value >= 0 else None
 
     def copy(self):
         new = CandidateSet(self._size)
@@ -228,7 +227,7 @@ class Board:
 
     def confirm_cell(self, coord: Coord):
         """Confirm cell's single candidate.
-        Will FAIL if the cell has no candidate, or more than two candidates.
+        Will FAIL if the cell doesn't have candidate, or has more than two candidates.
         Will NOT update other cells' candidates.
         """
         cell: Cell = self[coord]
@@ -238,7 +237,7 @@ class Board:
         if len(cell.candidates) != 1:
             raise ValueError('cannot confirm a cell with 0 candidate or 2+ candidates')
 
-        cell.value = cell.candidates.first()
+        cell.value = cell.candidates.peek()
         self._confirmed_count += 1
 
     @property
@@ -320,7 +319,7 @@ class Board:
             is_major_row = (row + 1) % self.block_height == 0
             for col in range(self._size):
                 is_major_col = (col + 1) % self.block_width == 0
-                cell = self[row, col]
+                cell: Cell = self[row, col]
                 if cell.confirmed:
                     cell_text = self.mark(cell.value)
                 else:
@@ -355,7 +354,7 @@ class Board:
             print('|', file=output, end='')
             for col in range(self._size):
                 is_major_col = (col + 1) % self.block_width == 0
-                cell = self[row, col]
+                cell: Cell = self[row, col]
                 cell_text = self.mark(cell.value) if cell.confirmed else '?'
                 fence = '|' if is_major_col else ':'
                 print(f' {cell_text} {fence}', file=output, end='')
@@ -372,7 +371,7 @@ class Board:
                 print('|', file=output, end='')
                 for col in range(self._size):
                     is_major_col = (col + 1) % self.block_width == 0
-                    cell = self[row, col]
+                    cell: Cell = self[row, col]
                     for sub_col in range(self.block_width):
                         value = sub_row * self.block_width + sub_col
                         if cell.is_possible(value):
@@ -390,7 +389,7 @@ def test():
     board = Board(3, 3)
     board.acknowledge_cell_value((1, 2), 1)
     board.acknowledge_cell_value((2, 5), 7)
-    board.acknowledge_cell_value((4, 3), 6)
+    board.acknowledge_cell_value((4, 3), 4)
     board.confirm_cell((4, 3))
     board.print_simple(sys.stdout)
     board.print_confirmed(sys.stdout)
