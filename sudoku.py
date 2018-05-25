@@ -2,8 +2,8 @@
 import argparse
 import string
 import sys
+import typing
 from enum import Enum, Flag, auto
-from typing import List, Tuple
 
 
 class AreaType(Enum):
@@ -33,6 +33,15 @@ class Coord:
     def col(self) -> int:
         return self._col
 
+    def __hash__(self):
+        return hash((self._row, self._col))
+
+    def __eq__(self, other):
+        if isinstance(other, Coord):
+            return self._row == other._row and self._col == other._col
+        else:
+            return False
+
     def __str__(self):
         return f'({self._row + 1}, {self.col + 1})'
 
@@ -58,6 +67,15 @@ class Area:
     def col_end(self) -> int:
         return self._end.col
 
+    def walk(self, excludes: typing.Container[Coord] = None) -> typing.Generator[Coord]:
+        """Walk through all coords within the area, excluding the one given by `excludes`."""
+        excludes = excludes or set()
+        for row in range(self.row_start, self.row_end):
+            for col in range(self.col_start, self.col_end):
+                coord = Coord(row, col)
+                if coord not in excludes:
+                    yield coord
+
     def __contains__(self, coord: Coord):
         return self.row_start <= coord.row < self.row_end and self.col_start <= coord.col < self.col_end
 
@@ -71,17 +89,38 @@ class CandidateSet:
     def _mask(value: int) -> int:
         return 1 << value
 
-    def set(self, value: int):
-        self._data = self._mask(value)
+    @staticmethod
+    def _retrieve_data(candidates) -> int:
+        if isinstance(candidates, CandidateSet):
+            return candidates._data
+        elif isinstance(candidates, int):
+            return CandidateSet._mask(candidates)
+        else:
+            raise TypeError(f'cannot retrieve data from type {type(candidates)}')
 
-    def retain(self, value: int):
-        self._data &= self._mask(value)
+    def set(self, candidates: typing.Union['CandidateSet', int]) -> bool:
+        """Returns True if candidates changed."""
+        data = self._data
+        self._data = self._retrieve_data(candidates)
+        return data != self._data
 
-    def add(self, value: int):
-        self._data |= self._mask(value)
+    def retain(self, candidates: typing.Union['CandidateSet', int]) -> bool:
+        """Returns True if candidates changed."""
+        data = self._data
+        self._data &= self._retrieve_data(candidates)
+        return data != self._data
 
-    def remove(self, value: int):
-        self &= ~self._mask(value)
+    def add(self, candidates: typing.Union['CandidateSet', int]) -> bool:
+        """Returns True if candidates changed."""
+        data = self._data
+        self._data |= self._retrieve_data(candidates)
+        return data != self._data
+
+    def remove(self, candidates: typing.Union['CandidateSet', int]) -> bool:
+        """Returns True if candidates changed."""
+        data = self._data
+        self &= ~self._retrieve_data(candidates)
+        return data != self._data
 
     def peek(self) -> int:
         """Returns a possible candidate value."""
@@ -94,8 +133,7 @@ class CandidateSet:
         return new
 
     def __len__(self):
-        # TODO: Can be refined.
-        return len([v for v in self])
+        return bin(self._data).count('1')
 
     def __contains__(self, value: int):
         return bool(self._data & self._mask(value))
@@ -111,13 +149,7 @@ class CandidateSet:
             value += 1
 
     def __iand__(self, other):
-        if isinstance(other, CandidateSet):
-            self._data &= other._data
-        # elif isinstance(other, int):
-        #     self._data &= self._mask(other)
-        else:
-            raise TypeError(f'cannot &= with {type(other)}')
-
+        self.retain(other)
         return self
 
     def __and__(self, other):
@@ -126,13 +158,7 @@ class CandidateSet:
         return new
 
     def __ior__(self, other):
-        if isinstance(other, CandidateSet):
-            self._data |= other._data
-        # elif isinstance(other, int):
-        #     self._data |= self._mask(other)
-        else:
-            raise TypeError(f'cannot |= with {type(other)}')
-
+        self.add(other)
         return self
 
     def __or__(self, other):
@@ -141,13 +167,7 @@ class CandidateSet:
         return new
 
     def __isub__(self, other):
-        if isinstance(other, CandidateSet):
-            self._data &= ~other._data
-        # elif isinstance(other, int):
-        #     self._data &= ~self._mask(other)
-        else:
-            raise TypeError(f'cannot -= with {type(other)}')
-
+        self.remove(other)
         return self
 
     def __sub__(self, other):
@@ -202,16 +222,17 @@ class Cell:
 
 # Cell 不做逻辑检查，直接接受指令并操作。
 # Board 做单个cell的逻辑检查，但不做cell之间的逻辑判定。
+# 只有board可以操作cell。
 class Board:
     def __init__(self, block_width: int = 3, block_height: int = 3):
         self._block_width = block_width
         self._block_height = block_height
         self._size = block_width * block_height
         self._mapping = f'123456789{string.ascii_uppercase}'
-        self._cells : List[Cell] = [Cell(r, c, self._size) for r in range(self._size) for c in range(self._size)]
+        self._cells = [Cell(r, c, self._size) for r in range(self._size) for c in range(self._size)]
         self._confirmed_count = 0
 
-    def acknowledge_cell_value(self, coord: Coord, value: int):
+    def acknowledge_cell(self, coord: Coord, value: int):
         """Remove cell's candidates except the given one.
         Confirmed cell cannot be acknowledged to different value.
         Will NOT confirm the cell.
@@ -219,7 +240,7 @@ class Board:
         if value is None:
             raise ValueError('cannot acknowledge None to a cell')
 
-        cell: Cell = self[coord]
+        cell = self._get_cell(coord)
         if cell.confirmed and cell.value != value:
             raise ValueError('cannot acknowledge different value to a confirmed cell')
 
@@ -230,7 +251,7 @@ class Board:
         Will FAIL if the cell doesn't have candidate, or has more than two candidates.
         Will NOT update other cells' candidates.
         """
-        cell: Cell = self[coord]
+        cell = self._get_cell(coord)
         if cell.confirmed:
             return
 
@@ -239,6 +260,34 @@ class Board:
 
         cell.value = cell.candidates.peek()
         self._confirmed_count += 1
+
+    def retain_candidates(self, candidates: CandidateSet, coords: typing.Iterable[Coord]) -> bool:
+        """Returns True if candidates changed."""
+        modified = False
+        coord: Coord
+        for coord in coords:
+            cell = self._get_cell(coord)
+            modified = cell.candidates.retain(candidates) or modified
+
+        return modified
+
+    def remove_candidates(self, candidates: CandidateSet, coords: typing.Iterable[Coord]) -> bool:
+        """Returns True if candidates changed."""
+        modified = False
+        coord: Coord
+        for coord in coords:
+            cell = self._get_cell(coord)
+            modified = cell.candidates.remove(candidates) or modified
+
+        return modified
+
+    def is_cell_confirmed(self, coord: Coord) -> bool:
+        cell = self._get_cell(coord)
+        return cell.confirmed
+
+    def get_cell_candidates_count(self, coord: Coord) -> int:
+        cell = self._get_cell(coord)
+        return len(cell.candidates)
 
     @property
     def block_width(self) -> int:
@@ -278,7 +327,7 @@ class Board:
 
         return Area(start, end)
 
-    def get_common_area(self, coords: List[Coord], area_type: AreaType) -> Area:
+    def get_common_area(self, coords: typing.Iterable[Coord], area_type: AreaType) -> Area:
         coord_iter = iter(coords)
         coord = next(coord_iter, None)
         if coord is None:
@@ -299,7 +348,7 @@ class Board:
         assert 0 <= col < self._size, f'col {col} out of range'
         return row * self._size + col
 
-    def _to_row_col(self, index: int) -> Tuple[int, int]:
+    def _to_row_col(self, index: int) -> typing.Tuple[int, int]:
         assert 0 <= index < self._size * self._size, f'index {index} out of range'
         return divmod(index, self._size)
 
@@ -307,19 +356,22 @@ class Board:
         if not (0 <= coord.row < self._size and 0 <= coord.col < self._size):
             raise ValueError(f'coord {coord} out of range')
 
-    def __getitem__(self, coord: Coord) -> Cell:
+    def _get_cell(self, coord: Coord) -> Cell:
         if isinstance(coord, (tuple, list)):
             coord = Coord(*coord)
 
         self._validate_coord(coord)
         return self._cells[self._to_index(coord.row, coord.col)]
 
+    def __getitem__(self, coord: Coord) -> Cell:
+        return self._get_cell(coord)
+
     def print_simple(self, output):
         for row in range(self._size):
             is_major_row = (row + 1) % self.block_height == 0
             for col in range(self._size):
                 is_major_col = (col + 1) % self.block_width == 0
-                cell: Cell = self[row, col]
+                cell: Cell = self._get_cell((row, col))
                 if cell.confirmed:
                     cell_text = self.mark(cell.value)
                 else:
@@ -354,7 +406,7 @@ class Board:
             print('|', file=output, end='')
             for col in range(self._size):
                 is_major_col = (col + 1) % self.block_width == 0
-                cell: Cell = self[row, col]
+                cell: Cell = self._get_cell((row, col))
                 cell_text = self.mark(cell.value) if cell.confirmed else '?'
                 fence = '|' if is_major_col else ':'
                 print(f' {cell_text} {fence}', file=output, end='')
@@ -371,7 +423,7 @@ class Board:
                 print('|', file=output, end='')
                 for col in range(self._size):
                     is_major_col = (col + 1) % self.block_width == 0
-                    cell: Cell = self[row, col]
+                    cell = self._get_cell((row, col))
                     for sub_col in range(self.block_width):
                         value = sub_row * self.block_width + sub_col
                         if cell.is_possible(value):
@@ -385,15 +437,58 @@ class Board:
             self.__print_board_line(output, is_major_row, self.block_width)
 
 
+class ParadoxError(Exception):
+    pass
+
+
+class SudokuSolver:
+    def __init__(self):
+        pass
+
+    def solve(self, board: Board):
+        self._deduce(board)
+        # deduce
+        # if not ok: guess
+        #
+        # deduce:
+        #   do:
+        #     apply rules
+        #   while has progress
+        #
+        # guess:
+        #   choose a cell
+        #   for each possibility:
+        #     assume
+        #     deduce
+        #     if failed: roll back, continue
+        #     if not ok: guess
+        #     if ok: return
+        pass
+
+    def _deduce(self, board: Board):
+        # Check if is already done here?
+        improved = False
+        improved = self._primary_deduce() or improved
+
+    def _primary_deduce(self) -> bool:
+        # for each coord, if no candidate, error; if 2+ candidates, pass.
+        # confirm cell
+        # for each area type: retain area exclude cell
+        pass
+
+
 def test():
     board = Board(3, 3)
-    board.acknowledge_cell_value((1, 2), 1)
-    board.acknowledge_cell_value((2, 5), 7)
-    board.acknowledge_cell_value((4, 3), 4)
+    board.acknowledge_cell((1, 2), 1)
+    board.acknowledge_cell((2, 5), 7)
+    board.acknowledge_cell((4, 3), 4)
     board.confirm_cell((4, 3))
     board.print_simple(sys.stdout)
     board.print_confirmed(sys.stdout)
     board.print_with_candidates(sys.stdout)
+
+    solver = SudokuSolver()
+    solver.solve(board)
     print('done.')
 
 
