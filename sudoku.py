@@ -1,5 +1,6 @@
 #/usr/bin/env python3
 import argparse
+import itertools
 import string
 import sys
 import typing
@@ -47,37 +48,44 @@ class Coord:
 
 
 class Area:
-    def __init__(self, start: Coord, end: Coord):
-        self._start = start
-        self._end = end
+    def __init__(self, left_top: Coord, right_bottom: Coord):
+        self._left_top = left_top
+        self._right_bottom = right_bottom
 
     @property
-    def row_start(self) -> int:
-        return self._start.row
+    def first_row(self) -> int:
+        return self._left_top.row
 
     @property
-    def row_end(self) -> int:
-        return self._end.row
+    def last_row(self) -> int:
+        return self._right_bottom.row
 
     @property
-    def col_start(self) -> int:
-        return self._start.col
+    def first_col(self) -> int:
+        return self._left_top.col
 
     @property
-    def col_end(self) -> int:
-        return self._end.col
+    def last_col(self) -> int:
+        return self._right_bottom.col
 
-    def walk(self, excludes: typing.Container[Coord] = None) -> typing.Generator[Coord]:
-        """Walk through all coords within the area, excluding the one given by `excludes`."""
+    @property
+    def row_range(self) -> typing.Iterator[int]:
+        return range(self.first_row, self.last_row + 1)
+
+    @property
+    def col_range(self) -> typing.Iterator[int]:
+        return range(self.first_col, self.last_col + 1)
+
+    def iter_coords(self, excludes: typing.Container[Coord] = None) -> typing.Iterator[Coord]:
+        """Iterate all coords within the area, excluding the one given by `excludes`."""
         excludes = excludes or set()
-        for row in range(self.row_start, self.row_end):
-            for col in range(self.col_start, self.col_end):
-                coord = Coord(row, col)
-                if coord not in excludes:
-                    yield coord
+        for row, col in itertools.product(self.row_range, self.col_range):
+            coord = Coord(row, col)
+            if coord not in excludes:
+                yield coord
 
     def __contains__(self, coord: Coord):
-        return self.row_start <= coord.row < self.row_end and self.col_start <= coord.col < self.col_end
+        return self.first_row <= coord.row <= self.last_row and self.first_col <= coord.col <= self.last_col
 
 
 class CandidateSet:
@@ -119,7 +127,7 @@ class CandidateSet:
     def remove(self, candidates: typing.Union['CandidateSet', int]) -> bool:
         """Returns True if candidates changed."""
         data = self._data
-        self &= ~self._retrieve_data(candidates)
+        self._data &= ~self._retrieve_data(candidates)
         return data != self._data
 
     def peek(self) -> int:
@@ -177,8 +185,8 @@ class CandidateSet:
 
 
 class Cell:
-    def __init__(self, row: int, col: int, size: int):
-        self._coord = Coord(row, col)
+    def __init__(self, coord: Coord, size: int):
+        self._coord = coord
         self._value: int = None
         self._candidates = CandidateSet(size)
 
@@ -186,7 +194,6 @@ class Cell:
     def coord(self) -> Coord:
         return self._coord
 
-    @property
     def confirmed(self) -> bool:
         return self._value is not None
 
@@ -207,14 +214,8 @@ class Cell:
     def is_possible(self, value: int) -> bool:
         return value in self._candidates
 
-    def intersection_candidates(self, candidates: CandidateSet):
-        self._candidates &= candidates
-
-    def difference_candidates(self, candidates: CandidateSet):
-        self._candidates -= candidates
-
     def __str__(self):
-        if self.confirmed:
+        if self.confirmed():
             return f'{self._coord}{self._value}'
         else:
             return f'{self._coord}[{self._candidates}]'
@@ -228,9 +229,85 @@ class Board:
         self._block_width = block_width
         self._block_height = block_height
         self._size = block_width * block_height
-        self._mapping = f'123456789{string.ascii_uppercase}'
-        self._cells = [Cell(r, c, self._size) for r in range(self._size) for c in range(self._size)]
+        self._mapping: str = f'123456789{string.ascii_uppercase}'
+        self._cells = [Cell(coord, self._size) for coord in self.iter_coords()]
         self._confirmed_count = 0
+
+    @property
+    def block_width(self) -> int:
+        return self._block_width
+
+    @property
+    def block_height(self) -> int:
+        return self._block_height
+
+    @property
+    def size(self) -> int:
+        return self._size
+
+    @property
+    def cells_count(self) -> int:
+        return len(self._cells)
+
+    @property
+    def blocks_per_row(self) -> int:
+        return self._block_height
+
+    @property
+    def blocks_per_col(self) -> int:
+        return self._block_width
+
+    def mark(self, value: int) -> str:
+        return self._mapping[value]
+
+    def iter_coords(self) -> typing.Iterator[Coord]:
+        for row, col in itertools.product(range(self._size), repeat=2):
+            yield Coord(row, col)
+
+    def iter_row_areas(self) -> typing.Iterator[Area]:
+        for row in range(self._size):
+            yield Area(Coord(row, 0), Coord(row, self._size - 1))
+
+    def iter_col_areas(self) -> typing.Iterator[Area]:
+        for col in range(self._size):
+            yield Area(Coord(0, col), Coord(self._size - 1, col))
+
+    def iter_block_areas(self) -> typing.Iterator[Area]:
+        pass
+
+    def solved(self) -> bool:
+        return self._confirmed_count == self.cells_count
+
+    def get_area(self, coord: Coord, area_type: AreaType) -> Area:
+        start: Coord
+        end: Coord
+        if area_type == area_type.ROW:
+            start = Coord(coord.row, 0)
+            end = Coord(coord.row, self._size - 1)
+        elif area_type == area_type.COLUMN:
+            start = Coord(0, coord.col)
+            end = Coord(self._size - 1, coord.col)
+        elif area_type == area_type.BLOCK:
+            start = Coord(coord.row // self._block_height * self._block_height,
+                          coord.col // self._block_width * self._block_width)
+            end = Coord(start.row + self._block_height - 1, start.col + self._block_width - 1)
+        else:
+            assert False, f'invalid area type {area_type}'
+
+        return Area(start, end)
+
+    def get_common_area(self, coords: typing.Iterable[Coord], area_type: AreaType) -> Area:
+        coord_iter = iter(coords)
+        coord = next(coord_iter, None)
+        if coord is None:
+            return None
+
+        area = self.get_area(coord, area_type)
+        for coord in coord_iter:
+            if coord not in area:
+                return None
+
+        return area
 
     def acknowledge_cell(self, coord: Coord, value: int):
         """Remove cell's candidates except the given one.
@@ -241,7 +318,7 @@ class Board:
             raise ValueError('cannot acknowledge None to a cell')
 
         cell = self._get_cell(coord)
-        if cell.confirmed and cell.value != value:
+        if cell.confirmed() and cell.value != value:
             raise ValueError('cannot acknowledge different value to a confirmed cell')
 
         cell.candidates.retain(value)
@@ -252,7 +329,7 @@ class Board:
         Will NOT update other cells' candidates.
         """
         cell = self._get_cell(coord)
-        if cell.confirmed:
+        if cell.confirmed():
             return
 
         if len(cell.candidates) != 1:
@@ -283,65 +360,11 @@ class Board:
 
     def is_cell_confirmed(self, coord: Coord) -> bool:
         cell = self._get_cell(coord)
-        return cell.confirmed
+        return cell.confirmed()
 
     def get_cell_candidates_count(self, coord: Coord) -> int:
         cell = self._get_cell(coord)
         return len(cell.candidates)
-
-    @property
-    def block_width(self) -> int:
-        return self._block_width
-
-    @property
-    def block_height(self) -> int:
-        return self._block_height
-
-    @property
-    def size(self) -> int:
-        return self._size
-
-    @property
-    def blocks_per_row(self) -> int:
-        return self._block_height
-
-    @property
-    def blocks_per_col(self) -> int:
-        return self._block_width
-
-    def get_area(self, coord: Coord, area_type: AreaType) -> Area:
-        start: Coord
-        end: Coord
-        if area_type == area_type.ROW:
-            start = Coord(coord.row, 0)
-            end = Coord(coord.row + 1, self._size)
-        elif area_type == area_type.COLUMN:
-            start = Coord(0, coord.col)
-            end = Coord(self._size, coord.col + 1)
-        elif area_type == area_type.BLOCK:
-            start = Coord(coord.row // self._block_height * self._block_height,
-                          coord.col // self._block_width * self._block_width)
-            end = Coord(start.row + self._block_height, start.col + self._block_width)
-        else:
-            assert False, f'invalid area type {area_type}'
-
-        return Area(start, end)
-
-    def get_common_area(self, coords: typing.Iterable[Coord], area_type: AreaType) -> Area:
-        coord_iter = iter(coords)
-        coord = next(coord_iter, None)
-        if coord is None:
-            return None
-
-        area = self.get_area(coord, area_type)
-        for coord in coord_iter:
-            if coord not in area:
-                return None
-
-        return area
-
-    def mark(self, value: int) -> str:
-        return self._mapping[value]
 
     def _to_index(self, row: int, col: int) -> int:
         assert 0 <= row < self._size, f'row {row} out of range'
@@ -407,7 +430,7 @@ class Board:
             for col in range(self._size):
                 is_major_col = (col + 1) % self.block_width == 0
                 cell: Cell = self._get_cell((row, col))
-                cell_text = self.mark(cell.value) if cell.confirmed else '?'
+                cell_text = self.mark(cell.value) if cell.confirmed() else '?'
                 fence = '|' if is_major_col else ':'
                 print(f' {cell_text} {fence}', file=output, end='')
 
@@ -429,7 +452,7 @@ class Board:
                         if cell.is_possible(value):
                             sub_cell_text = self.mark(value)
                         else:
-                            sub_cell_text = '*' if cell.confirmed else ' '
+                            sub_cell_text = '*' if cell.confirmed() else ' '
                         print(f' {sub_cell_text}', file=output, end='')
                     print(' |' if is_major_col else ' :', file=output, end='')
                 print(file=output)
@@ -447,60 +470,101 @@ class SudokuSolver:
 
     def solve(self, board: Board):
         self._deduce(board)
-        # deduce
-        # if not ok: guess
-        #
-        # deduce:
-        #   do:
-        #     apply rules
-        #   while has progress
-        #
-        # guess:
+        if not board.solved:
+            self._guess(board)
+
+    def _deduce(self, board: Board):
+        if board.solved():
+            return
+
+        finished = False
+        while not finished:
+            improved = False
+            improved = self._primary_check(board) or improved
+            # Apply other rules.
+            finished = not improved
+
+    def _guess(self, board: Board):
         #   choose a cell
         #   for each possibility:
         #     assume
         #     deduce
         #     if failed: roll back, continue
-        #     if not ok: guess
-        #     if ok: return
+        #     if not solved: guess
+        #     if solved: return
         pass
 
-    def _deduce(self, board: Board):
-        # Check if is already done here?
+    def _primary_check(self, board: Board) -> bool:
         improved = False
-        improved = self._primary_deduce() or improved
+        for coord in board.iter_coords():
+            cell: Cell = board[coord]
+            if cell.confirmed():
+                continue
 
-    def _primary_deduce(self) -> bool:
-        # for each coord, if no candidate, error; if 2+ candidates, pass.
-        # confirm cell
-        # for each area type: retain area exclude cell
-        pass
+            candidates_count = len(cell.candidates)
+            if candidates_count > 1:
+                continue
+            elif candidates_count == 0:
+                raise ParadoxError(f'cell {coord} has no candidate')
+
+            # candidates_count = 1
+            board.confirm_cell(coord)
+            print(f'[Primary Check] cell {coord} is confirmed to be value "{board.mark(cell.value)}"')
+            for area_type in AreaType:
+                area = board.get_area(coord, area_type)
+                result = board.remove_candidates(cell.candidates, area.iter_coords(excludes={coord}))
+                improved = result or improved
+
+        return improved
 
 
-def test():
+def test(args):
     board = Board(3, 3)
-    board.acknowledge_cell((1, 2), 1)
-    board.acknowledge_cell((2, 5), 7)
-    board.acknowledge_cell((4, 3), 4)
-    board.confirm_cell((4, 3))
-    board.print_simple(sys.stdout)
-    board.print_confirmed(sys.stdout)
+    with open(args.puzzle_file) as f:
+        for row, line in enumerate(f):
+            if row == board.size:
+                break
+
+            for col, char in enumerate(line):
+                value = board._mapping.find(char)
+                if value >= 0:
+                    board.acknowledge_cell((row, col), value)
+
+    # board.acknowledge_cell((1, 2), 1)
+    # board.acknowledge_cell((2, 5), 7)
+    # board.acknowledge_cell((4, 3), 4)
+    # board.confirm_cell((4, 3))
+    # board.print_simple(sys.stdout)
+    # board.print_confirmed(sys.stdout)
     board.print_with_candidates(sys.stdout)
 
     solver = SudokuSolver()
     solver.solve(board)
-    print('done.')
+    board.print_confirmed(sys.stdout)
+    # board.print_simple(sys.stdout)
+    # board.print_with_candidates(sys.stdout)
+    if board.solved():
+        print('board is solved')
+    else:
+        print('board is not solved')
 
 
 def main():
     parser = argparse.ArgumentParser(description='Deductive Sudoku Solver')
 
-    # parser.add_argument('-w', '--block-width', type=int, default=3,
-    #                     help='')
+    puzzle_group = parser.add_argument_group('board arguments')
+    puzzle_group.add_argument('-w', '--block-width', type=int, default=3,
+                              help='how many columns a block contains (default: 3)')
+    puzzle_group.add_argument('--block-height', type=int, default=3,
+                              help='how many rows a block contains (default: 3)')
+    puzzle_group.add_argument('--mapping',
+                              help='')
+    puzzle_group.add_argument('-f', '--puzzle-file',
+                              help='puzzle file')
 
-    args = parser.parse_args()
-    # print(args)
-    test()
+    args = parser.parse_args(['-f', 'old/001que.txt'])
+    print(args)
+    test(args)
 
 
 
