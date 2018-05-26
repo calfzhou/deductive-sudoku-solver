@@ -1,5 +1,6 @@
 #/usr/bin/env python3
 import argparse
+import copy
 import itertools
 import string
 import sys
@@ -13,18 +14,18 @@ class AreaType(Enum):
     BLOCK = auto()
 
 
-class OperationRange(Flag):
-    CELLS = auto()
-    GIVEN_AREA = auto()
-    OTHER_AREAS = auto()
-    AREAS = GIVEN_AREA | OTHER_AREAS
-    ALL = CELLS | AREAS
-
-
 class Coord:
     def __init__(self, row: int, col: int):
         self._row = row
         self._col = col
+
+    def __copy__(self):
+        # This class is immutable.
+        return self
+
+    def __deepcopy(self, memo):
+        # This class is immutable.
+        return self
 
     @property
     def row(self) -> int:
@@ -51,6 +52,14 @@ class Area:
     def __init__(self, left_top: Coord, right_bottom: Coord):
         self._left_top = left_top
         self._right_bottom = right_bottom
+
+    def __copy__(self):
+        # This class is immutable.
+        return self
+
+    def __deepcopy(self, memo):
+        # This class is immutable.
+        return self
 
     @property
     def first_row(self) -> int:
@@ -135,11 +144,6 @@ class CandidateSet:
         value = self._data.bit_length() - 1
         return value if value >= 0 else None
 
-    def copy(self):
-        new = CandidateSet(self._size)
-        new._data = self._data
-        return new
-
     def __len__(self):
         return bin(self._data).count('1')
 
@@ -161,7 +165,7 @@ class CandidateSet:
         return self
 
     def __and__(self, other):
-        new = self.copy()
+        new = copy.copy(self)
         new &= other
         return new
 
@@ -170,7 +174,7 @@ class CandidateSet:
         return self
 
     def __or__(self, other):
-        new = self.copy()
+        new = copy.copy(self)
         new |= other
         return new
 
@@ -179,7 +183,7 @@ class CandidateSet:
         return self
 
     def __sub__(self, other):
-        new = self.copy()
+        new = copy.copy(self)
         new -= other
         return new
 
@@ -389,7 +393,7 @@ class Board:
     def __getitem__(self, coord: Coord) -> Cell:
         return self._get_cell(coord)
 
-    def print_simple(self, output):
+    def print_simple(self, output=sys.stdout):
         for row in range(self._size):
             is_major_row = (row + 1) % self.block_height == 0
             for col in range(self._size):
@@ -414,16 +418,15 @@ class Board:
             if is_major_row and row < self._size - 1:
                 print(file=output)
 
-    def __print_board_line(self, output, major, cell_width=1):
+    def __print_board_line(self, output=sys.stdout, major=True, cell_width=1):
         gap = '-' if major else ' '
         fence = '+'
         cell_line = gap.join('-' for _ in range(cell_width))
         board_line = f'{gap}{fence}{gap}'.join(cell_line for _ in range(self.size))
         print(f'{fence}{gap}{board_line}{gap}{fence}', file=output)
 
-    def print_confirmed(self, output):
+    def print_confirmed(self, output=sys.stdout):
         self.__print_board_line(output, True)
-
         for row in range(self._size):
             is_major_row = (row + 1) % self.block_height == 0
             print('|', file=output, end='')
@@ -437,9 +440,8 @@ class Board:
             print(file=output)
             self.__print_board_line(output, is_major_row)
 
-    def print_with_candidates(self, output):
+    def print_with_candidates(self, output=sys.stdout):
         self.__print_board_line(output, True, self.block_width)
-
         for row in range(self._size):
             is_major_row = (row + 1) % self.block_height == 0
             for sub_row in range(self.block_height):
@@ -464,37 +466,84 @@ class ParadoxError(Exception):
     pass
 
 
+class SolvingStatus:
+    def __init__(self):
+        self.guess_level = 0
+        self.solutions: typing.List[Board] = []
+        self.interrupted = False
+
+    def print(self, *args, **kwargs):
+        if self.guess_level == 0:
+            print(*args, **kwargs)
+        else:
+            print('', '  ' * (self.guess_level - 1), *args, **kwargs)
+
+
 class SudokuSolver:
     def __init__(self):
         pass
 
-    def solve(self, board: Board):
-        self._deduce(board)
-        if not board.solved:
-            self._guess(board)
+    def solve(self, board: Board) -> SolvingStatus:
+        status = SolvingStatus()
+        self._deduce(board, status)
+        if not board.solved():
+            # board.print_with_candidates(sys.stdout)
+            self._guess(board, status)
 
-    def _deduce(self, board: Board):
-        if board.solved():
-            return
+        return status
 
+    @staticmethod
+    def _msg_indent(level) -> str:
+        return '  ' * level
+
+    def _deduce(self, board: Board, status: SolvingStatus):
         finished = False
         while not finished:
             improved = False
-            improved = self._primary_check(board) or improved
+            improved = self._primary_check(board, status) or improved
             # Apply other rules.
             finished = not improved
 
-    def _guess(self, board: Board):
-        #   choose a cell
-        #   for each possibility:
-        #     assume
-        #     deduce
-        #     if failed: roll back, continue
-        #     if not solved: guess
-        #     if solved: return
-        pass
+    def _guess(self, board: Board, status: SolvingStatus):
+        coord = self._choose_guessing_coord(board)
+        if coord is None:
+            return
 
-    def _primary_check(self, board: Board) -> bool:
+        cell = board[coord]
+        for value in cell.candidates:
+            temp_board = copy.deepcopy(board)
+            temp_board.acknowledge_cell(cell.coord, value)
+            status.print(f'[Guess] assume cell {cell.coord} is "{board.mark(value)}"')
+            status.guess_level += 1
+            try:
+                self._deduce(temp_board, status)
+            except ParadoxError as err:
+                status.print('[Guess Failed]', err)
+            else:
+                if temp_board.solved():
+                    status.solutions.append(temp_board)
+                    status.print('[Solution] find a solution')
+                    temp_board.print_simple(sys.stdout)
+                else:
+                    self._guess(temp_board, status)
+            finally:
+                status.guess_level -= 1
+
+    def _choose_guessing_coord(self, board: Board) -> Coord:
+        coord_for_guessing = None
+        min_candidates = board.size + 1
+        for coord in board.iter_coords():
+            cell: Cell = board[coord]
+            if cell.confirmed():
+                continue
+
+            if len(cell.candidates) < min_candidates:
+                coord_for_guessing = coord
+                min_candidates = len(cell.candidates)
+
+        return coord_for_guessing
+
+    def _primary_check(self, board: Board, status: SolvingStatus) -> bool:
         improved = False
         for coord in board.iter_coords():
             cell: Cell = board[coord]
@@ -509,11 +558,11 @@ class SudokuSolver:
 
             # candidates_count = 1
             board.confirm_cell(coord)
-            print(f'[Primary Check] cell {coord} is confirmed to be value "{board.mark(cell.value)}"')
             for area_type in AreaType:
                 area = board.get_area(coord, area_type)
                 result = board.remove_candidates(cell.candidates, area.iter_coords(excludes={coord}))
                 improved = result or improved
+            status.print(f'[Primary Check] cell {coord} is confirmed to be "{board.mark(cell.value)}"')
 
         return improved
 
@@ -530,23 +579,24 @@ def test(args):
                 if value >= 0:
                     board.acknowledge_cell((row, col), value)
 
-    # board.acknowledge_cell((1, 2), 1)
-    # board.acknowledge_cell((2, 5), 7)
-    # board.acknowledge_cell((4, 3), 4)
-    # board.confirm_cell((4, 3))
     # board.print_simple(sys.stdout)
     # board.print_confirmed(sys.stdout)
-    board.print_with_candidates(sys.stdout)
+    # board.print_with_candidates(sys.stdout)
 
     solver = SudokuSolver()
-    solver.solve(board)
-    board.print_confirmed(sys.stdout)
+    status = solver.solve(board)
+    # board.print_confirmed(sys.stdout)
     # board.print_simple(sys.stdout)
     # board.print_with_candidates(sys.stdout)
     if board.solved():
-        print('board is solved')
+        print('puzzle is solved without guess')
+    elif status.solutions:
+        print(f'find {len(status.solutions)} solutions by guessing')
+        if status.interrupted:
+            print('there might be more solutions')
     else:
-        print('board is not solved')
+        print('puzzle is unsolvable')
+    # board.print_confirmed(sys.stdout)
 
 
 def main():
@@ -562,7 +612,7 @@ def main():
     puzzle_group.add_argument('-f', '--puzzle-file',
                               help='puzzle file')
 
-    args = parser.parse_args(['-f', 'old/001que.txt'])
+    args = parser.parse_args(['-f', 'old/002que.txt'])
     print(args)
     test(args)
 
