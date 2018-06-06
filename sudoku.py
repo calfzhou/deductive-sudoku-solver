@@ -45,7 +45,7 @@ class Coord:
             return False
 
     def __str__(self):
-        return f'({self._row + 1}, {self.col + 1})'
+        return f'({self._row + 1}, {self._col + 1})'
 
 
 class Area:
@@ -492,10 +492,6 @@ class SudokuSolver:
 
         return status
 
-    @staticmethod
-    def _msg_indent(level) -> str:
-        return '  ' * level
-
     def _deduce(self, board: Board, status: SolvingStatus):
         finished = False
         while not finished:
@@ -537,6 +533,9 @@ class SudokuSolver:
             if cell.confirmed():
                 continue
 
+            if len(cell.candidates) == 2:
+                return coord
+
             if len(cell.candidates) < min_candidates:
                 coord_for_guessing = coord
                 min_candidates = len(cell.candidates)
@@ -564,6 +563,18 @@ class SudokuSolver:
                 improved = result or improved
             status.print(f'[Primary Check] cell {coord} is confirmed to be "{board.mark(cell.value)}"')
 
+        return improved
+
+    def _naked_deduce(self, level: int, board: Board, status: SolvingStatus) -> bool:
+        improved = False
+        return improved
+
+    def _hidden_deduce(self, level: int, board: Board, status: SolvingStatus) -> bool:
+        improved = False
+        return improved
+
+    def _link_deduce(self, level: int, board: Board, status: SolvingStatus) -> bool:
+        improved = False
         return improved
 
 
@@ -615,7 +626,6 @@ def main():
     args = parser.parse_args(['-f', 'old/002que.txt'])
     print(args)
     test(args)
-
 
 
 if __name__ == '__main__':
