@@ -1,4 +1,5 @@
 #/usr/bin/env python3
+import argparse
 import copy
 import itertools
 import string
@@ -54,7 +55,7 @@ class NumberSet:
         return data != self._data
 
     def peek(self) -> int:
-        """Returns a available number."""
+        """Returns an available number."""
         value = self._data.bit_length() - 1
         return value if value >= 0 else None
 
@@ -106,6 +107,14 @@ class AreaType(Enum):
     ROW = auto()
     COLUMN = auto()
     BLOCK = auto()
+
+    def orthogonal_type(self):
+        if self == type(self).ROW:
+            return type(self).COLUMN
+        elif self == type(self).COLUMN:
+            return type(self).ROW
+        else:
+            raise ValueError(f'there is no orthogonal area type of {self}')
 
 
 class Cell:
@@ -197,6 +206,8 @@ class Area:
                 positions.add(item.index_of_area(self._area_type))
             elif isinstance(item, Area):
                 positions.add(item.index)
+            elif isinstance(item, int):
+                positions.add(item)
             else:
                 raise TypeError(f'Unsupported item type of excludes "{type(item)}"')
 
@@ -248,20 +259,17 @@ class Board:
     def mark(self, value: int) -> str:
         return self._mapping[value]
 
-    def get_cell(self, row: int, col: int) -> Cell:
-        return self._cells[self._get_cell_index(row, col)]
-
     def iter_cells(self) -> typing.Iterator[Cell]:
         return iter(self._cells)
 
     def get_area(self, area_type: AreaType, index: int) -> Area:
         return self._areas[area_type][index]
 
-    def iter_rows(self) -> typing.Iterator[Area]:
-        return iter(self._areas[AreaType.ROW])
-
-    def iter_areas(self) -> typing.Iterator[Area]:
-        return itertools.chain(*self._areas.values())
+    def iter_areas(self, area_type: AreaType = None) -> typing.Iterator[Area]:
+        if area_type is None:
+            return itertools.chain(*self._areas.values())
+        else:
+            return iter(self._areas[area_type])
 
     def get_common_area(self, cells: typing.Iterable[Cell], area_type: AreaType) -> Area:
         cell_iter = iter(cells)
@@ -299,14 +307,6 @@ class Board:
                 area = self._areas[area_type][area_index]
                 area._cells.append(cell)
                 cell._areas[area_type] = area
-
-    # def _get_area(self, area_type: AreaType, index: int) -> Area:
-    #     return
-
-    def _get_cell_index(self, row, col) -> int:
-        assert 0 <= row < self._size, f'row {row} out of range'
-        assert 0 <= col < self._size, f'col {col} out of range'
-        return self._size * row + col
 
 
 class ParadoxError(Exception):
@@ -405,7 +405,7 @@ class BoardData:
         return modified
 
     def print_simple(self, board: Board):
-        for row in board.iter_rows():
+        for row in board.iter_areas(AreaType.ROW):
             for cell in row.iter_cells():
                 is_major_col = (cell.index_of_area(row) + 1) % board.block_width == 0
                 if self.is_cell_confirmed(cell):
@@ -437,7 +437,7 @@ class BoardData:
 
     def print_confirmed(self, board: Board):
         self.__print_board_line(board, major=True)
-        for row in board.iter_rows():
+        for row in board.iter_areas(AreaType.ROW):
             print('|', end='')
             for cell in row.iter_cells():
                 cell_text = board.mark(self.get_value(cell)) if self.is_cell_confirmed(cell) else '?'
@@ -451,7 +451,7 @@ class BoardData:
 
     def print_with_candidates(self, board: Board):
         self.__print_board_line(board, major=True, cell_width=board.block_width)
-        for row in board.iter_rows():
+        for row in board.iter_areas(AreaType.ROW):
             for sub_row in range(board.block_height):
                 print('|', end='')
                 for cell in row.iter_cells():
@@ -537,7 +537,8 @@ class SudokuSolver:
                 improved = self._hidden_deduce(level, puzzle, status) or improved
 
             if self.linked_deduce_enabled and 2 <= level <= self.max_linked_deduce_level:
-                improved = self._linked_deduce(level, puzzle, status) or improved
+                improved = self._linked_deduce(level, True, puzzle, status) or improved
+                improved = self._linked_deduce(level, False, puzzle, status) or improved
 
             if improved and self.lower_level_deduce_first:
                 return improved
@@ -699,12 +700,13 @@ class SudokuSolver:
 
         return improved
 
-    def _linked_deduce(self, level: int, puzzle: BoardData, status: SolvingStatus):
+    def _linked_deduce(self, level: int, row_first: bool, puzzle: BoardData, status: SolvingStatus):
+        area_type = AreaType.ROW if row_first else AreaType.COLUMN
         improved = False
         for number in self._board.iter_numbers():
             # filter number rows/cols
             all_areas = []
-            for area in self._board.iter_rows(): # or cells
+            for area in self._board.iter_areas(area_type):
                 if len(puzzle.get_positions(area, number)) > level:
                     continue
 
@@ -725,7 +727,7 @@ class SudokuSolver:
                 # TODO: 取这些positions对应的cols/rows
                 # for each of them, remove candidates(number, col/row - row/col交点)
                 for position in positions:
-                    orthogonal_area = self._board.get_area(AreaType.COLUMN, position) # TODO: ROW
+                    orthogonal_area = self._board.get_area(area_type.orthogonal_type(), position)
                     result = puzzle.remove_candidates(number, orthogonal_area.iter_cells(excludes=areas)) or result
 
                 if result:
@@ -736,20 +738,32 @@ class SudokuSolver:
         return improved
 
 
-def test():
+def test(args):
     board = Board(block_width=3, block_height=3)
     puzzle = BoardData(board)
 
-    puzzle_path = 'old/005que.txt'
-    with open(puzzle_path) as f:
-        for row, line in enumerate(f):
-            if row == board.size:
-                break
+    def iter_puzzle_lines(file):
+        for line in file:
+            line = line.strip(' \r\n')
+            if line != '':
+                yield line
 
-            for col, char in enumerate(line):
-                value = board._mapping.find(char)
-                if value >= 0:
-                    cell = board.get_cell(row, col)
+    def iter_values(line):
+        for mark in line:
+            if mark == ' ':
+                continue
+
+            value = board._mapping.find(mark)
+            yield value if value >= 0 else None
+
+    with open(args.puzzle_file) as f:
+        row: Area
+        line: str
+        for row, line in zip(board.iter_areas(AreaType.ROW), iter_puzzle_lines(f)):
+            cell: Cell
+            value: int
+            for cell, value in zip(row.iter_cells(), iter_values(line)):
+                if value is not None:
                     puzzle.acknowledge_cell(cell, value)
 
     puzzle.print_simple(board)
@@ -769,7 +783,33 @@ def test():
 
 
 def main():
-    test()
+    parser = argparse.ArgumentParser(description='Deductive Sudoku Solver')
+
+    puzzle_group = parser.add_argument_group('puzzle arguments')
+    puzzle_group.add_argument('--block-width', type=int, default=3,
+                              help='how many columns a block contains (default: 3)')
+    puzzle_group.add_argument('--block-height', type=int, default=3,
+                              help='how many rows a block contains (default: 3)')
+    puzzle_group.add_argument('--mapping',
+                              help='')
+    puzzle_group.add_argument('-f', '--puzzle-file',
+                              help='puzzle file')
+
+    rule_group = parser.add_argument_group('deduce rule arguments')
+    for rule in ('naked', 'hidden', 'linked'):
+        rule_group.add_argument(f'--max-{rule}-deduce-level', type=int)
+
+    rule_group.add_argument('--disable-lower-level-first', action='store_true')
+    rule_group.add_argument('--disable-deduce', action='store_true')
+    rule_group.add_argument('--disable-guess', action='store_true')
+
+    output_group = parser.add_argument_group('output arguments')
+    output_group.add_argument('--foo')
+
+    # args = parser.parse_args()
+    args = parser.parse_args(['-f', 'old/005que.txt'])
+    print(args)
+    test(args)
 
 
 if __name__ == '__main__':
