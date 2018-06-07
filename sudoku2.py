@@ -1,10 +1,11 @@
 #/usr/bin/env python3
 import argparse
 import copy
+import distutils.util
+import enum
 import itertools
 import string
 import typing
-from enum import Enum, auto
 
 
 class NumberSet:
@@ -103,10 +104,10 @@ class NumberSet:
         return new
 
 
-class AreaType(Enum):
-    ROW = auto()
-    COLUMN = auto()
-    BLOCK = auto()
+class AreaType(enum.IntEnum):
+    ROW = 0
+    COLUMN = 1
+    BLOCK = 2
 
     def orthogonal_type(self):
         if self == type(self).ROW:
@@ -323,6 +324,8 @@ class StopGuessing(Exception):
 
 class BoardData:
     def __init__(self, board: Board):
+        self._board_size = board.size
+
         # Every cell's confirmed value.
         self._cell_values: typing.List[int] = [None for _ in board.iter_cells()]
         self._confirmed_count = 0
@@ -331,8 +334,13 @@ class BoardData:
         self._cell_candidates = [NumberSet(board.size) for _ in board.iter_cells()]
 
         # Every (area, cell)'s naked confirm level.
+        self._naked_confirm_levels = [board.size] * len(AreaType) * board.size * board.size
 
         # Every (area, number)'s hidden confirm level.
+        self._hidden_confirm_levels = [board.size] * len(AreaType) * board.size * board.size
+
+        # Every (row/col number)'s linked confirm level.
+        self._linked_confirm_levels = [board.size] * len(AreaType) * board.size * board.size
 
     def solved(self) -> bool:
         return self._confirmed_count == len(self._cell_values)
@@ -356,6 +364,20 @@ class BoardData:
                 positions.add(cell.index_of_area(area))
 
         return positions
+
+    def get_naked_confirm_level(self, cell: Cell, area_type: AreaType) -> int:
+        index = cell.index * len(AreaType) + int(area_type)
+        return self._naked_confirm_levels[index]
+
+    def get_hidden_confirm_level(self, area: Area, number: int) -> int:
+        assert 0 <= number < self._board_size, f'number {number} out of range'
+        index = (int(area.area_type) * self._board_size + area.index) * self._board_size + number
+        return self._hidden_confirm_levels[index]
+
+    def get_linked_confirm_level(self, area: Area, number: int) -> int:
+        index = 0
+        index = (int(area.area_type) * self._board_size + area.index) * self._board_size + number
+        return self._linked_confirm_levels[index]
 
     def acknowledge_cell(self, cell: Cell, value: int):
         """Remove cell's candidates except the given one.
@@ -783,6 +805,7 @@ def test(args):
 
 
 def main():
+    strtobool = lambda s: bool(distutils.util.strtobool(s))
     parser = argparse.ArgumentParser(description='Deductive Sudoku Solver')
 
     puzzle_group = parser.add_argument_group('puzzle arguments')
@@ -799,9 +822,12 @@ def main():
     for rule in ('naked', 'hidden', 'linked'):
         rule_group.add_argument(f'--max-{rule}-deduce-level', type=int)
 
-    rule_group.add_argument('--disable-lower-level-first', action='store_true')
-    rule_group.add_argument('--disable-deduce', action='store_true')
-    rule_group.add_argument('--disable-guess', action='store_true')
+    rule_group.add_argument('--lower-level-first',
+                            type=strtobool, nargs='?', const=True, default=True)
+    rule_group.add_argument('--deduce',
+                            type=strtobool, nargs='?', const=True, default=True)
+    rule_group.add_argument('--guess',
+                            type=strtobool, nargs='?', const=True, default=True)
 
     output_group = parser.add_argument_group('output arguments')
     output_group.add_argument('--foo')
