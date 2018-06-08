@@ -1,4 +1,4 @@
-#/usr/bin/env python3
+#!/usr/bin/env python3
 import argparse
 import copy
 import distutils.util
@@ -102,6 +102,9 @@ class NumberSet:
         new = copy.copy(self)
         new -= other
         return new
+
+    def __repr__(self):
+        return ', '.join(str(n) for n in self)
 
 
 class AreaType(enum.IntEnum):
@@ -217,10 +220,10 @@ class Area:
                 yield cell
 
     def __repr__(self):
-        if self._cells:
+        if self._area_type == AreaType.BLOCK:
             return f'{self._area_type.name} {self._cells[0]}-{self._cells[-1]}'
         else:
-            return f'{self._area_type.name}-{self._index + 1}'
+            return f'{self._area_type.name} {self._index + 1}'
 
 
 class Board:
@@ -325,9 +328,10 @@ class StopGuessing(Exception):
 class BoardData:
     def __init__(self, board: Board):
         self._board_size = board.size
+        self._acknowledged_cells = NumberSet(0)
 
         # Every cell's confirmed value.
-        self._cell_values: typing.List[int] = [None for _ in board.iter_cells()]
+        self._cell_values = [None] * board.size * board.size
         self._confirmed_count = 0
 
         # Every cell's candidate set.
@@ -339,45 +343,14 @@ class BoardData:
         # Every (area, number)'s hidden confirm level.
         self._hidden_confirm_levels = [board.size] * len(AreaType) * board.size * board.size
 
-        # Every (row/col number)'s linked confirm level.
+        # Every (row/col, number)'s linked confirm level.
         self._linked_confirm_levels = [board.size] * len(AreaType) * board.size * board.size
 
     def solved(self) -> bool:
         return self._confirmed_count == len(self._cell_values)
 
-    def get_value(self, cell: Cell) -> int:
-        return self._cell_values[cell.index]
-
-    def _set_value(self, cell: Cell, value: int):
-        self._cell_values[cell.index] = value
-
-    def get_candidates(self, cell: Cell) -> NumberSet:
-        return self._cell_candidates[cell.index]
-
-    def is_cell_confirmed(self, cell: Cell) -> bool:
-        return self.get_value(cell) is not None
-
-    def get_positions(self, area: Area, number: int) -> NumberSet:
-        positions = NumberSet(0)
-        for cell in area.iter_cells():
-            if number in self.get_candidates(cell):
-                positions.add(cell.index_of_area(area))
-
-        return positions
-
-    def get_naked_confirm_level(self, cell: Cell, area_type: AreaType) -> int:
-        index = cell.index * len(AreaType) + int(area_type)
-        return self._naked_confirm_levels[index]
-
-    def get_hidden_confirm_level(self, area: Area, number: int) -> int:
-        assert 0 <= number < self._board_size, f'number {number} out of range'
-        index = (int(area.area_type) * self._board_size + area.index) * self._board_size + number
-        return self._hidden_confirm_levels[index]
-
-    def get_linked_confirm_level(self, area: Area, number: int) -> int:
-        index = 0
-        index = (int(area.area_type) * self._board_size + area.index) * self._board_size + number
-        return self._linked_confirm_levels[index]
+    def is_cell_acknowledged(self, cell: Cell) -> bool:
+        return cell.index in self._acknowledged_cells
 
     def acknowledge_cell(self, cell: Cell, value: int):
         """Remove cell's candidates except the given one.
@@ -391,6 +364,16 @@ class BoardData:
             raise ValueError('cannot acknowledge different value to a confirmed cell')
 
         self.get_candidates(cell).retain(value)
+        self._acknowledged_cells.add(cell.index)
+
+    def get_value(self, cell: Cell) -> int:
+        return self._cell_values[cell.index]
+
+    def _set_value(self, cell: Cell, value: int):
+        self._cell_values[cell.index] = value
+
+    def is_cell_confirmed(self, cell: Cell) -> bool:
+        return self.get_value(cell) is not None
 
     def confirm_cell(self, cell: Cell):
         """Confirm cell's single candidate.
@@ -407,6 +390,17 @@ class BoardData:
         value = candidates.peek()
         self._set_value(cell, value)
         self._confirmed_count += 1
+
+    def get_candidates(self, cell: Cell) -> NumberSet:
+        return self._cell_candidates[cell.index]
+
+    def get_positions(self, area: Area, number: int) -> NumberSet:
+        positions = NumberSet(0)
+        for cell in area.iter_cells():
+            if number in self.get_candidates(cell):
+                positions.add(cell.index_of_area(area))
+
+        return positions
 
     def retain_candidates(self, candidates: NumberSet, cells: typing.Iterable[Cell]) -> bool:
         """Returns True if candidates changed."""
@@ -426,12 +420,41 @@ class BoardData:
 
         return modified
 
+    def get_naked_confirm_level(self, cell: Cell, area_type: AreaType) -> int:
+        index = cell.index * len(AreaType) + int(area_type)
+        return self._naked_confirm_levels[index]
+
+    def confirm_naked_level(self, cell: Cell, area_type: AreaType, level: int):
+        index = cell.index * len(AreaType) + int(area_type)
+        if level < self._naked_confirm_levels[index]:
+            self._naked_confirm_levels[index] = level
+
+    def get_hidden_confirm_level(self, area: Area, number: int) -> int:
+        assert 0 <= number < self._board_size, f'number {number} out of range'
+        index = (int(area.area_type) * self._board_size + area.index) * self._board_size + number
+        return self._hidden_confirm_levels[index]
+
+    def confirm_hidden_level(self, area: Area, number: int, level: int):
+        assert 0 <= number < self._board_size, f'number {number} out of range'
+        index = (int(area.area_type) * self._board_size + area.index) * self._board_size + number
+        if level < self._hidden_confirm_levels[index]:
+            self._hidden_confirm_levels[index] = level
+
+    def get_linked_confirm_level(self, area: Area, number: int) -> int:
+        index = (int(area.area_type) * self._board_size + area.index) * self._board_size + number
+        return self._linked_confirm_levels[index]
+
+    def confirm_linked_level(self, area: Area, number: int, level: int):
+        index = (int(area.area_type) * self._board_size + area.index) * self._board_size + number
+        if level < self._linked_confirm_levels[index]:
+            self._linked_confirm_levels[index] = level
+
     def print_simple(self, board: Board):
         for row in board.iter_areas(AreaType.ROW):
             for cell in row.iter_cells():
                 is_major_col = (cell.index_of_area(row) + 1) % board.block_width == 0
                 if self.is_cell_confirmed(cell):
-                    cell_text = board.mark(cell.value)
+                    cell_text = board.mark(self.get_value(cell))
                 else:
                     cell_text = ''.join(map(board.mark, self.get_candidates(cell)))
                     cell_text = f'[{cell_text}]'
@@ -523,9 +546,9 @@ class SudokuSolver:
         self.linked_deduce_enabled = True
         self.max_linked_deduce_level = board.size - 1
 
-        self.lower_level_deduce_first = False
+        self.lower_level_deduce_first = True
 
-        self.guess_enabled = False
+        self.guess_enabled = True
         self.max_solutions_count = 1
 
     def solve(self, puzzle: BoardData) -> SolvingStatus:
@@ -575,8 +598,8 @@ class SudokuSolver:
         for value in puzzle.get_candidates(cell):
             temp_puzzle = copy.deepcopy(puzzle)
             temp_puzzle.acknowledge_cell(cell, value)
-            status.print(f'[Guess] assume cell {cell} is "{self._board.mark(value)}"')
-            status.guess_level += 1
+            status.print(f'[Guess L{status.guess_depth}] assume cell {cell} is "{self._board.mark(value)}"')
+            status.guess_depth += 1
             try:
                 self._deduce(temp_puzzle, status)
             except ParadoxError as err:
@@ -585,7 +608,7 @@ class SudokuSolver:
                 if temp_puzzle.solved():
                     status.solutions.append(temp_puzzle)
                     status.print('[Solution] find a solution')
-                    temp_puzzle.print_simple()
+                    temp_puzzle.print_simple(self._board)
                     if len(status.solutions) >= self.max_solutions_count:
                         raise StopGuessing
                 else:
@@ -624,33 +647,37 @@ class SudokuSolver:
 
             # len(candidates) = 1
             puzzle.confirm_cell(cell)
+            result = False
             for cell_area in cell.iter_areas():
-                result = puzzle.remove_candidates(candidates, cell_area.iter_cells(excludes=[cell]))
-                improved = result or improved
+                result = puzzle.remove_candidates(candidates, cell_area.iter_cells(excludes=[cell])) or result
 
-            status.print(f'[Primary Check] cell {cell} is confirmed to be "{self._board.mark(candidates.peek())}"')
+            improved = result or improved
+            if result and not puzzle.is_cell_acknowledged(cell):
+                status.print(f'[Primary Check] {cell} "{self._board.mark(candidates.peek())}" TODO')
+
             if puzzle.solved():
                 raise DeduceFinished
 
         return improved
 
     def _naked_deduce(self, level: int, puzzle: BoardData, status: SolvingStatus):
+        def is_useful(cell: Cell) -> bool:
+            if puzzle.is_cell_confirmed(cell):
+                return False
+            if len(puzzle.get_candidates(cell)) > level:
+                return False
+            if puzzle.get_naked_confirm_level(cell, area.area_type) <= level:
+                return False
+            return True
+
         improved = False
         for area in self._board.iter_areas():
-            # filter area cells
-            all_cells = []
-            for cell in area.iter_cells():
-                if puzzle.is_cell_confirmed(cell):
-                    continue
-                if len(puzzle.get_candidates(cell)) > level:
-                    continue
-
-                # TODO: Check confirm level.
-
-                all_cells.append(cell)
-
             # for each L-combinations
+            all_cells = [cell for cell in area.iter_cells() if is_useful(cell)]
             for cells in itertools.combinations(all_cells, level):
+                if not all(map(is_useful, cells)):
+                    continue
+
                 # check candidates union
                 candidates = NumberSet(0)
                 for cell in cells:
@@ -666,31 +693,35 @@ class SudokuSolver:
                 result = False
                 for cell_area in self._board.iter_common_areas(cells):
                     result = puzzle.remove_candidates(candidates, cell_area.iter_cells(excludes=cells)) or result
+                    for cell in cells:
+                        puzzle.confirm_naked_level(cell, cell_area.area_type, level)
 
                 improved = result or improved
                 if result:
-                    status.print(f'[Naked Deduce] area {area} cells {cells} TODO')
+                    status.print(f'[Naked Deduce L{level}] {area} {cells} {candidates} TODO')
                     # TODO: update area-cell confirm level.
                 else:
                     status.useless_naked_deduce[level] += 1
-                #     status.print(f'[Naked Deduce] redundant area {area} cells {cells}')
 
         return improved
 
     def _hidden_deduce(self, level: int, puzzle: BoardData, status: SolvingStatus):
+        def is_useful(number: int) -> bool:
+            if len(puzzle.get_positions(area, number)) > level:
+                # TODO: 应该是可以部分参与。
+                return False
+            if puzzle.get_hidden_confirm_level(area, number) <= level:
+                return False
+            return True
+
         improved = False
         for area in self._board.iter_areas():
-            # filter area numbers
-            all_numbers = []
-            for number in self._board.iter_numbers():
-                if len(puzzle.get_positions(area, number)) > level:
-                    # TODO: 应该是可以部分参与。
+            # for each L-combinations
+            all_numbers = [number for number in self._board.iter_numbers() if is_useful(number)]
+            for numbers in itertools.combinations(all_numbers, level):
+                if not all(map(is_useful, numbers)):
                     continue
 
-                all_numbers.append(number)
-
-            # for each L-combinations
-            for numbers in itertools.combinations(all_numbers, level):
                 # check positions union
                 positions = NumberSet(0)
                 for number in numbers:
@@ -713,29 +744,35 @@ class SudokuSolver:
                     else:
                         result = puzzle.remove_candidates(numbers, cell_area.iter_cells(excludes=cells)) or result
 
+                    if len(positions) == level:
+                        for number in numbers:
+                            puzzle.confirm_hidden_level(cell_area, number, level)
+
                 improved = result or improved
                 if result:
-                    status.print(f'[Hidden Deduce] area {area} numbers {numbers} TODO')
+                    status.print(f'[Hidden Deduce L{level}] {area} {numbers} {cells} TODO')
                 else:
                     status.useless_hidden_deduce[level] += 1
-                #     status.print(f'[Hidden Deduce] redundant area {area} numbers {numbers}')
 
         return improved
 
     def _linked_deduce(self, level: int, row_first: bool, puzzle: BoardData, status: SolvingStatus):
+        def is_useful(area: Area) -> bool:
+            if len(puzzle.get_positions(area, number)) > level:
+                return False
+            if puzzle.get_linked_confirm_level(area, number) <= level:
+                return False
+            return True
+
         area_type = AreaType.ROW if row_first else AreaType.COLUMN
         improved = False
         for number in self._board.iter_numbers():
-            # filter number rows/cols
-            all_areas = []
-            for area in self._board.iter_areas(area_type):
-                if len(puzzle.get_positions(area, number)) > level:
+            # for each L-combinations
+            all_areas = [area for area in self._board.iter_areas(area_type) if is_useful(area)]
+            for areas in itertools.combinations(all_areas, level):
+                if not all(map(is_useful, areas)):
                     continue
 
-                all_areas.append(area)
-
-            # for each L-combinations
-            for areas in itertools.combinations(all_areas, level):
                 positions = NumberSet(0)
                 for area in areas:
                     positions.add(puzzle.get_positions(area, number))
@@ -751,9 +788,13 @@ class SudokuSolver:
                 for position in positions:
                     orthogonal_area = self._board.get_area(area_type.orthogonal_type(), position)
                     result = puzzle.remove_candidates(number, orthogonal_area.iter_cells(excludes=areas)) or result
+                    puzzle.confirm_linked_level(orthogonal_area, number, level)
+
+                for area in areas:
+                    puzzle.confirm_linked_level(area, number, level)
 
                 if result:
-                    status.print(f'[Linked Deduce] number {number} areas {areas} TODO')
+                    status.print(f'[Linked Deduce L{level}] number {number} areas {areas} {positions} TODO')
                 else:
                     status.useless_linked_deduce[level] += 1
 
@@ -761,8 +802,32 @@ class SudokuSolver:
 
 
 def test(args):
-    board = Board(block_width=3, block_height=3)
-    puzzle = BoardData(board)
+    board = Board(block_width=args.block_width, block_height=args.block_height)
+
+    solver = SudokuSolver(board)
+    if args.deduce:
+        if args.naked_deduce == 0:
+            solver.naked_deduce_enabled = False
+        elif args.naked_deduce is not None:
+            solver.max_naked_deduce_level = args.naked_deduce
+
+        if args.hidden_deduce == 0:
+            solver.hidden_deduce_enabled = False
+        elif args.hidden_deduce is not None:
+            solver.max_hidden_deduce_level = args.hidden_deduce
+
+        if args.linked_deduce == 0:
+            solver.linked_deduce_enabled = False
+        elif args.linked_deduce is not None:
+            solver.max_linked_deduce_level = args.linked_deduce
+    else:
+        solver.naked_deduce_enabled = False
+        solver.hidden_deduce_enabled = False
+        solver.linked_deduce_enabled = False
+
+    solver.lower_level_deduce_first = args.lower_level_first
+    solver.guess_enabled = args.guess
+    solver.max_solutions_count = args.max_solutions
 
     def iter_puzzle_lines(file):
         for line in file:
@@ -778,6 +843,7 @@ def test(args):
             value = board._mapping.find(mark)
             yield value if value >= 0 else None
 
+    puzzle = BoardData(board)
     with open(args.puzzle_file) as f:
         row: Area
         line: str
@@ -789,10 +855,9 @@ def test(args):
                     puzzle.acknowledge_cell(cell, value)
 
     puzzle.print_simple(board)
-    puzzle.print_confirmed(board)
+    # puzzle.print_confirmed(board)
     puzzle.print_with_candidates(board)
 
-    solver = SudokuSolver(board)
     status = solver.solve(puzzle)
     puzzle.print_confirmed(board)
 
@@ -807,20 +872,20 @@ def test(args):
 def main():
     strtobool = lambda s: bool(distutils.util.strtobool(s))
     parser = argparse.ArgumentParser(description='Deductive Sudoku Solver')
+    parser.add_argument('puzzle_file',
+                        help='puzzle file')
 
-    puzzle_group = parser.add_argument_group('puzzle arguments')
-    puzzle_group.add_argument('--block-width', type=int, default=3,
-                              help='how many columns a block contains (default: 3)')
-    puzzle_group.add_argument('--block-height', type=int, default=3,
-                              help='how many rows a block contains (default: 3)')
-    puzzle_group.add_argument('--mapping',
-                              help='')
-    puzzle_group.add_argument('-f', '--puzzle-file',
-                              help='puzzle file')
+    board_group = parser.add_argument_group('puzzle arguments')
+    board_group.add_argument('--block-width', type=int, default=3,
+                             help='how many columns a block contains (default: 3)')
+    board_group.add_argument('--block-height', type=int, default=3,
+                             help='how many rows a block contains (default: 3)')
+    board_group.add_argument('--mapping',
+                             help='')
 
     rule_group = parser.add_argument_group('deduce rule arguments')
     for rule in ('naked', 'hidden', 'linked'):
-        rule_group.add_argument(f'--max-{rule}-deduce-level', type=int)
+        rule_group.add_argument(f'--{rule}-deduce', type=int)
 
     rule_group.add_argument('--lower-level-first',
                             type=strtobool, nargs='?', const=True, default=True)
@@ -828,12 +893,13 @@ def main():
                             type=strtobool, nargs='?', const=True, default=True)
     rule_group.add_argument('--guess',
                             type=strtobool, nargs='?', const=True, default=True)
+    rule_group.add_argument('--max-solutions', type=int, default=10)
 
     output_group = parser.add_argument_group('output arguments')
     output_group.add_argument('--foo')
 
-    # args = parser.parse_args()
-    args = parser.parse_args(['-f', 'old/005que.txt'])
+    args = parser.parse_args()
+    # args = parser.parse_args(['-f', 'old/005que.txt'])
     print(args)
     test(args)
 
