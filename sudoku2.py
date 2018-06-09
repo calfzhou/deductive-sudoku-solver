@@ -5,6 +5,7 @@ import distutils.util
 import enum
 import itertools
 import string
+import sys
 import typing
 
 
@@ -112,14 +113,6 @@ class AreaType(enum.IntEnum):
     COLUMN = 1
     BLOCK = 2
 
-    def orthogonal_type(self):
-        if self == type(self).ROW:
-            return type(self).COLUMN
-        elif self == type(self).COLUMN:
-            return type(self).ROW
-        else:
-            raise ValueError(f'there is no orthogonal area type of {self}')
-
 
 class Cell:
     def __init__(self, row: int, col: int, board: 'Board'):
@@ -172,6 +165,7 @@ class Cell:
 class Area:
     def __init__(self, area_type: AreaType, index: int, board: 'Board'):
         assert 0 <= index < board.size, f'area index {index} out of range'
+        self._board = board
         self._area_type = area_type
         self._index = index
         self._cells: typing.List[Cell] = []
@@ -220,8 +214,12 @@ class Area:
                 yield cell
 
     def __repr__(self):
+        return f'{self._area_type.name} {self._index + 1}'
+
+    def __str__(self):
         if self._area_type == AreaType.BLOCK:
-            return f'{self._area_type.name} {self._cells[0]}-{self._cells[-1]}'
+            r, c = divmod(self._index, self._board.blocks_per_row)
+            return f'{self._area_type.name} {r + 1},{c + 1}'
         else:
             return f'{self._area_type.name} {self._index + 1}'
 
@@ -420,12 +418,12 @@ class BoardData:
 
         return modified
 
-    def get_naked_confirm_level(self, cell: Cell, area_type: AreaType) -> int:
-        index = cell.index * len(AreaType) + int(area_type)
+    def get_naked_confirm_level(self, area: Area, cell: Cell) -> int:
+        index = cell.index * len(AreaType) + int(area.area_type)
         return self._naked_confirm_levels[index]
 
-    def confirm_naked_level(self, cell: Cell, area_type: AreaType, level: int):
-        index = cell.index * len(AreaType) + int(area_type)
+    def confirm_naked_level(self, area: Area, cell: Cell, level: int):
+        index = cell.index * len(AreaType) + int(area.area_type)
         if level < self._naked_confirm_levels[index]:
             self._naked_confirm_levels[index] = level
 
@@ -548,6 +546,7 @@ class SudokuSolver:
 
         self.lower_level_deduce_first = True
 
+        self.deduce_enabled = True
         self.guess_enabled = True
         self.max_solutions_count = 1
 
@@ -572,6 +571,9 @@ class SudokuSolver:
         improved = False
         improved = self._primary_check(puzzle, status) or improved
         if improved and self.lower_level_deduce_first:
+            return improved
+
+        if not self.deduce_enabled:
             return improved
 
         for level in range(1, self._board.size):
@@ -646,15 +648,17 @@ class SudokuSolver:
                 continue
 
             # len(candidates) = 1
-            puzzle.confirm_cell(cell)
             result = False
             for cell_area in cell.iter_areas():
                 result = puzzle.remove_candidates(candidates, cell_area.iter_cells(excludes=[cell])) or result
+                puzzle.confirm_naked_level(cell_area, cell, 1)
+                puzzle.confirm_hidden_level(cell_area, candidates.peek(), 1)
 
             improved = result or improved
             if result and not puzzle.is_cell_acknowledged(cell):
                 status.print(f'[Primary Check] {cell} "{self._board.mark(candidates.peek())}" TODO')
 
+            puzzle.confirm_cell(cell)
             if puzzle.solved():
                 raise DeduceFinished
 
@@ -662,11 +666,11 @@ class SudokuSolver:
 
     def _naked_deduce(self, level: int, puzzle: BoardData, status: SolvingStatus):
         def is_useful(cell: Cell) -> bool:
-            if puzzle.is_cell_confirmed(cell):
+            # if puzzle.is_cell_confirmed(cell):
+            #     return False
+            if puzzle.get_naked_confirm_level(area, cell) <= level:
                 return False
             if len(puzzle.get_candidates(cell)) > level:
-                return False
-            if puzzle.get_naked_confirm_level(cell, area.area_type) <= level:
                 return False
             return True
 
@@ -694,23 +698,29 @@ class SudokuSolver:
                 for cell_area in self._board.iter_common_areas(cells):
                     result = puzzle.remove_candidates(candidates, cell_area.iter_cells(excludes=cells)) or result
                     for cell in cells:
-                        puzzle.confirm_naked_level(cell, cell_area.area_type, level)
+                        puzzle.confirm_naked_level(cell_area, cell, level)
+                    for number in candidates:
+                        puzzle.confirm_hidden_level(cell_area, number, level)
 
                 improved = result or improved
                 if result:
                     status.print(f'[Naked Deduce L{level}] {area} {cells} {candidates} TODO')
-                    # TODO: update area-cell confirm level.
                 else:
                     status.useless_naked_deduce[level] += 1
+
+                if len(cells) == 1:
+                    puzzle.confirm_cell(cells[0])
+                    if puzzle.solved():
+                        raise DeduceFinished
 
         return improved
 
     def _hidden_deduce(self, level: int, puzzle: BoardData, status: SolvingStatus):
+        level_ex = max(level, self._board.block_width, self._board.block_height)
         def is_useful(number: int) -> bool:
-            if len(puzzle.get_positions(area, number)) > level:
-                # TODO: 应该是可以部分参与。
-                return False
             if puzzle.get_hidden_confirm_level(area, number) <= level:
+                return False
+            if len(puzzle.get_positions(area, number)) > level_ex:
                 return False
             return True
 
@@ -729,42 +739,54 @@ class SudokuSolver:
 
                 if len(positions) < level:
                     raise ParadoxError(f'TODO: Hidden level {level} impossible.')
-                # elif len(positions) > level:
-                #     continue
+                elif len(positions) > level_ex:
+                    continue
+                elif area.area_type == AreaType.ROW and len(positions) > max(level, self._board.block_width):
+                    continue
+                elif area.area_type == AreaType.COLUMN and len(positions) > max(level, self._board.block_height):
+                    continue
 
                 result = False
-                cells = []
-                for index in positions:
-                    cells.append(area.get_cell(index))
-
+                cells = [area.get_cell(index) for index in positions]
                 for cell_area in self._board.iter_common_areas(cells):
                     if cell_area == area:
-                        if len(positions) == level:
+                        if len(cells) == level:
                             result = puzzle.retain_candidates(numbers, cells) or result
                     else:
                         result = puzzle.remove_candidates(numbers, cell_area.iter_cells(excludes=cells)) or result
 
-                    if len(positions) == level:
+                    if len(cells) == level:
                         for number in numbers:
                             puzzle.confirm_hidden_level(cell_area, number, level)
+                        for cell in cells:
+                            puzzle.confirm_naked_level(cell_area, cell, level)
+                    # else:
+                    #     for number in numbers:
+                    #         puzzle.confirm_hidden_level(cell_area, number, len(cells))
 
                 improved = result or improved
                 if result:
                     status.print(f'[Hidden Deduce L{level}] {area} {numbers} {cells} TODO')
-                else:
+                elif len(cells) == level:
                     status.useless_hidden_deduce[level] += 1
+
+                if len(cells) == 1:
+                    puzzle.confirm_cell(cells[0])
+                    if puzzle.solved():
+                        raise DeduceFinished
 
         return improved
 
     def _linked_deduce(self, level: int, row_first: bool, puzzle: BoardData, status: SolvingStatus):
         def is_useful(area: Area) -> bool:
-            if len(puzzle.get_positions(area, number)) > level:
-                return False
             if puzzle.get_linked_confirm_level(area, number) <= level:
+                return False
+            if len(puzzle.get_positions(area, number)) > level:
                 return False
             return True
 
         area_type = AreaType.ROW if row_first else AreaType.COLUMN
+        orthogonal_area_type = AreaType.COLUMN if row_first else AreaType.ROW
         improved = False
         for number in self._board.iter_numbers():
             # for each L-combinations
@@ -783,10 +805,9 @@ class SudokuSolver:
                     continue
 
                 result = False
-                # TODO: 取这些positions对应的cols/rows
                 # for each of them, remove candidates(number, col/row - row/col交点)
                 for position in positions:
-                    orthogonal_area = self._board.get_area(area_type.orthogonal_type(), position)
+                    orthogonal_area = self._board.get_area(orthogonal_area_type, position)
                     result = puzzle.remove_candidates(number, orthogonal_area.iter_cells(excludes=areas)) or result
                     puzzle.confirm_linked_level(orthogonal_area, number, level)
 
@@ -805,29 +826,25 @@ def test(args):
     board = Board(block_width=args.block_width, block_height=args.block_height)
 
     solver = SudokuSolver(board)
-    if args.deduce:
-        if args.naked_deduce == 0:
-            solver.naked_deduce_enabled = False
-        elif args.naked_deduce is not None:
-            solver.max_naked_deduce_level = args.naked_deduce
-
-        if args.hidden_deduce == 0:
-            solver.hidden_deduce_enabled = False
-        elif args.hidden_deduce is not None:
-            solver.max_hidden_deduce_level = args.hidden_deduce
-
-        if args.linked_deduce == 0:
-            solver.linked_deduce_enabled = False
-        elif args.linked_deduce is not None:
-            solver.max_linked_deduce_level = args.linked_deduce
-    else:
-        solver.naked_deduce_enabled = False
-        solver.hidden_deduce_enabled = False
-        solver.linked_deduce_enabled = False
-
     solver.lower_level_deduce_first = args.lower_level_first
+    solver.deduce_enabled = args.deduce
     solver.guess_enabled = args.guess
     solver.max_solutions_count = args.max_solutions
+
+    if args.naked_deduce == 0:
+        solver.naked_deduce_enabled = False
+    elif args.naked_deduce is not None:
+        solver.max_naked_deduce_level = args.naked_deduce
+
+    if args.hidden_deduce == 0:
+        solver.hidden_deduce_enabled = False
+    elif args.hidden_deduce is not None:
+        solver.max_hidden_deduce_level = args.hidden_deduce
+
+    if args.linked_deduce == 0:
+        solver.linked_deduce_enabled = False
+    elif args.linked_deduce is not None:
+        solver.max_linked_deduce_level = args.linked_deduce
 
     def iter_puzzle_lines(file):
         for line in file:
@@ -844,7 +861,7 @@ def test(args):
             yield value if value >= 0 else None
 
     puzzle = BoardData(board)
-    with open(args.puzzle_file) as f:
+    with (open(args.puzzle_file) if args.puzzle_file else sys.stdin) as f:
         row: Area
         line: str
         for row, line in zip(board.iter_areas(AreaType.ROW), iter_puzzle_lines(f)):
@@ -872,7 +889,7 @@ def test(args):
 def main():
     strtobool = lambda s: bool(distutils.util.strtobool(s))
     parser = argparse.ArgumentParser(description='Deductive Sudoku Solver')
-    parser.add_argument('puzzle_file',
+    parser.add_argument('puzzle_file', nargs='?',
                         help='puzzle file')
 
     board_group = parser.add_argument_group('puzzle arguments')
