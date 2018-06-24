@@ -374,6 +374,10 @@ class BoardData:
         # Every (row/col, number)'s linked confirm level.
         self._linked_confirm_levels = [board.size] * len(AreaType) * board.size * board.size
 
+    @property
+    def board_size(self):
+        return self._board_size
+
     def solved(self) -> bool:
         return self._confirmed_count == len(self._cell_values)
 
@@ -477,6 +481,15 @@ class BoardData:
         if level < self._linked_confirm_levels[index]:
             self._linked_confirm_levels[index] = level
 
+    def print(self, board: Board, border: bool = False):
+        if border:
+            if self.solved():
+                self.print_confirmed(board)
+            else:
+                self.print_with_candidates(board)
+        else:
+            self.print_simple(board)
+
     def print_simple(self, board: Board):
         for row in board.iter_areas(AreaType.ROW):
             for cell in row.iter_cells():
@@ -544,21 +557,48 @@ class BoardData:
             self.__print_board_line(board, major=is_major_row, cell_width=board.block_width)
 
 
+class GuessDecision(typing.NamedTuple):
+    cell: int
+    value: int
+
+
+class GuessedSolution(typing.NamedTuple):
+    guesses: typing.List[GuessDecision]
+    data: BoardData
+
+
+class DeduceMsgLevel(enum.IntEnum):
+    NONE = enum.auto()
+    GUESS = enum.auto()
+    DEDUCE = enum.auto()
+    BOARD = enum.auto()
+
+    def __str__(self):
+        return self.name.lower()
+
+    @classmethod
+    def parse(cls, name):
+        return cls[name.upper()]
+
+
 class SolvingStatus:
-    def __init__(self, board_size: int):
-        self.guess_depth = 0
-        self.solutions: typing.List[BoardData] = []
+    def __init__(self, puzzle: BoardData):
+        self.puzzle = puzzle
+        self.guesses: typing.List[GuessDecision] = []
+        self.solutions: typing.List[GuessedSolution] = []
         self.interrupted = False
 
-        self.useless_naked_deduce = [0] * board_size
-        self.useless_hidden_deduce = [0] * board_size
-        self.useless_linked_deduce = [0] * board_size
+        self.useless_naked_deduce = [0] * puzzle.board_size
+        self.useless_hidden_deduce = [0] * puzzle.board_size
+        self.useless_linked_deduce = [0] * puzzle.board_size
 
-    def print(self, *args, **kwargs):
-        if self.guess_depth == 0:
-            print(*args, **kwargs)
-        else:
-            print('', '  ' * (self.guess_depth - 1), *args, **kwargs)
+    @property
+    def guessing(self) -> bool:
+        return bool(self.guesses)
+
+    @property
+    def guess_depth(self) -> int:
+        return len(self.guesses)
 
 
 class SudokuSolver:
@@ -579,72 +619,83 @@ class SudokuSolver:
         self.guess_enabled = True
         self.max_solutions_count = 10
 
+        self.deduce_msg_level = DeduceMsgLevel.DEDUCE
+        self.guess_msg_level = DeduceMsgLevel.DEDUCE
+        self.board_border_enabled = True
+
+    @property
+    def board(self):
+        return self._board
+
     def solve(self, puzzle: BoardData) -> SolvingStatus:
-        status = SolvingStatus(self._board.size)
-        self._deduce(puzzle, status)
+        status = SolvingStatus(puzzle)
+        self._deduce(status)
         if not puzzle.solved() and self.guess_enabled:
-            puzzle.print_with_candidates(self._board)
+            print('Deduce finished but not solved the puzzle, try guessing.')
+            # puzzle.print(self._board, self.board_border_enabled)
             try:
-                self._guess(puzzle, status)
+                self._guess(status)
             except StopGuessing:
                 pass
 
         return status
 
-    def _deduce(self, puzzle: BoardData, status: SolvingStatus):
+    def _deduce(self, status: SolvingStatus):
         finished = False
         try:
-            while not (puzzle.solved() or finished):
-                finished = not self._deduce_one_round(puzzle, status)
+            while not (status.puzzle.solved() or finished):
+                finished = not self._deduce_one_round(status)
         except DeduceFinished:
             pass
 
-    def _deduce_one_round(self, puzzle: BoardData, status: SolvingStatus) -> bool:
+    def _deduce_one_round(self, status: SolvingStatus) -> bool:
         improved = False
-        improved = self._primary_check(puzzle, status) or improved
+        improved = self._primary_check(status) or improved
         if improved and self.lower_level_deduce_first:
             return improved
 
         for level in range(1, self._board.size):
             if self.naked_deduce_enabled and 2 <= level <= self.max_naked_deduce_level:
-                improved = self._naked_deduce(level, puzzle, status) or improved
+                improved = self._naked_deduce(level, status) or improved
 
             if self.hidden_deduce_enabled and 1 <= level <= self.max_hidden_deduce_level:
-                improved = self._hidden_deduce(level, puzzle, status) or improved
+                improved = self._hidden_deduce(level, status) or improved
 
             if self.linked_deduce_enabled and 2 <= level <= self.max_linked_deduce_level:
-                improved = self._linked_deduce(level, AreaType.ROW, puzzle, status) or improved
-                improved = self._linked_deduce(level, AreaType.COLUMN, puzzle, status) or improved
+                improved = self._linked_deduce(level, AreaType.ROW, status) or improved
+                improved = self._linked_deduce(level, AreaType.COLUMN, status) or improved
 
             if improved and self.lower_level_deduce_first:
                 return improved
 
         return improved
 
-    def _guess(self, puzzle: BoardData, status: SolvingStatus):
-        cell = self._choose_guessing_cell(puzzle)
+    def _guess(self, status: SolvingStatus):
+        orig_puzzle = status.puzzle
+        cell = self._choose_guessing_cell(orig_puzzle)
         if cell is None:
             return
 
-        for value in puzzle.get_candidates(cell):
-            temp_puzzle = copy.deepcopy(puzzle)
-            temp_puzzle.acknowledge_cell(cell, value)
+        for value in orig_puzzle.get_candidates(cell):
+            status.puzzle = copy.deepcopy(orig_puzzle)
+            status.puzzle.acknowledge_cell(cell, value)
             self._show_guess_msg(status, cell, value)
-            status.guess_depth += 1
+            status.guesses.append(GuessDecision(cell.index, value))
             try:
-                self._deduce(temp_puzzle, status)
+                self._deduce(status)
             except ParadoxError:
                 pass
             else:
-                if temp_puzzle.solved():
+                if status.puzzle.solved():
                     self._show_guess_success_msg(status)
-                    status.solutions.append(temp_puzzle)
+                    solution = GuessedSolution(copy.deepcopy(status.guesses), status.puzzle)
+                    status.solutions.append(solution)
                     if len(status.solutions) >= self.max_solutions_count:
                         raise StopGuessing
                 else:
-                    self._guess(temp_puzzle, status)
+                    self._guess(status)
             finally:
-                status.guess_depth -= 1
+                status.guesses.pop()
 
     def _choose_guessing_cell(self, puzzle: BoardData) -> Cell:
         cell_for_guessing = None
@@ -663,7 +714,8 @@ class SudokuSolver:
 
         return cell_for_guessing
 
-    def _primary_check(self, puzzle: BoardData, status: SolvingStatus) -> bool:
+    def _primary_check(self, status: SolvingStatus) -> bool:
+        puzzle = status.puzzle
         improved = False
         for cell in self._board.iter_cells():
             if puzzle.is_cell_confirmed(cell):
@@ -684,8 +736,9 @@ class SudokuSolver:
                 puzzle.confirm_hidden_level(cell_area, candidates.peek(), 1)
 
             improved = result or improved
-            if result and not puzzle.is_cell_acknowledged(cell):
-                self._show_primary_check_msg(status, cell, candidates.peek())
+            if result:
+                self._show_primary_check_msg(status, cell, candidates.peek(),
+                                             acknowledged=puzzle.is_cell_acknowledged(cell))
 
             puzzle.confirm_cell(cell)
             if puzzle.solved():
@@ -693,7 +746,8 @@ class SudokuSolver:
 
         return improved
 
-    def _naked_deduce(self, level: int, puzzle: BoardData, status: SolvingStatus):
+    def _naked_deduce(self, level: int, status: SolvingStatus):
+        puzzle = status.puzzle
         def is_useful(cell: Cell) -> bool:
             # if puzzle.is_cell_confirmed(cell):
             #     return False
@@ -745,7 +799,8 @@ class SudokuSolver:
 
         return improved
 
-    def _hidden_deduce(self, level: int, puzzle: BoardData, status: SolvingStatus):
+    def _hidden_deduce(self, level: int, status: SolvingStatus):
+        puzzle = status.puzzle
         level_ex = max(level, self._board.block_width, self._board.block_height)
         def is_useful(number: int) -> bool:
             if puzzle.get_hidden_confirm_level(area, number) <= level:
@@ -808,7 +863,8 @@ class SudokuSolver:
 
         return improved
 
-    def _linked_deduce(self, level: int, area_type: AreaType, puzzle: BoardData, status: SolvingStatus):
+    def _linked_deduce(self, level: int, area_type: AreaType, status: SolvingStatus):
+        puzzle = status.puzzle
         def is_useful(area: Area) -> bool:
             if puzzle.get_linked_confirm_level(area, number) <= level:
                 return False
@@ -855,7 +911,17 @@ class SudokuSolver:
     def _get_msg_indent(self, status: SolvingStatus) -> str:
         return '  ' * status.guess_depth
 
-    def _show_primary_check_msg(self, status: SolvingStatus, cell: Cell, value: int):
+    def _get_msg_level(self, status: SolvingStatus) -> DeduceMsgLevel:
+        return self.guess_msg_level if status.guessing else self.deduce_msg_level
+
+    def _show_primary_check_msg(self, status: SolvingStatus, cell: Cell, value: int, acknowledged: bool = False):
+        msg_level = self._get_msg_level(status)
+        if msg_level < DeduceMsgLevel.DEDUCE:
+            return
+
+        if acknowledged and msg_level < DeduceMsgLevel.BOARD:
+            return
+
         indent = self._get_msg_indent(status)
         if value is None:
             print(f'{indent}[Paradox @ Primary Check] cell {cell} has no candidate')
@@ -863,8 +929,17 @@ class SudokuSolver:
             value_text = self._board.mark(value)
             print(f'{indent}[Primary Check] cell {cell} has single candidate "{value_text}"')
 
+        if msg_level < DeduceMsgLevel.BOARD:
+            return
+
+        status.puzzle.print(self._board, self.board_border_enabled)
+
     def _show_naked_deduce_msg(self, status: SolvingStatus, area: Area,
                                cells: typing.Iterable[Cell], candidates: typing.Iterable[int]):
+        msg_level = self._get_msg_level(status)
+        if msg_level < DeduceMsgLevel.DEDUCE:
+            return
+
         indent = self._get_msg_indent(status)
         level = len(cells)
         cells_text = ', '.join(f'{cell}' for cell in cells)
@@ -876,8 +951,17 @@ class SudokuSolver:
             print(f'{indent}[Naked Deduce L{level}] in {area.area_type} {area},'
                   f' cells [{cells_text}] have exactly {level} candidates [{candidates_text}]')
 
+        if msg_level < DeduceMsgLevel.BOARD:
+            return
+
+        status.puzzle.print(self._board, self.board_border_enabled)
+
     def _show_hidden_deduce_msg(self, status: SolvingStatus, area: Area,
                                 numbers: typing.Iterable[int], cells: typing.Iterable[Cell]):
+        msg_level = self._get_msg_level(status)
+        if msg_level < DeduceMsgLevel.DEDUCE:
+            return
+
         indent = self._get_msg_indent(status)
         level = len(numbers)
         exactly = 'exactly ' if len(cells) == level else ''
@@ -890,8 +974,17 @@ class SudokuSolver:
             print(f'{indent}[Hidden Deduce L{level}] in {area.area_type} {area},'
                   f' numbers [{numbers_text}] appear in {exactly}{len(cells)} cells [{cells_text}]')
 
+        if msg_level < DeduceMsgLevel.BOARD:
+            return
+
+        status.puzzle.print(self._board, self.board_border_enabled)
+
     def _show_linked_deduce_msg(self, status: SolvingStatus, number: int, area_type: AreaType,
                                 areas: typing.Iterable[Area], positions: typing.Iterable[int]):
+        msg_level = self._get_msg_level(status)
+        if msg_level < DeduceMsgLevel.DEDUCE:
+            return
+
         indent = self._get_msg_indent(status)
         level = len(areas)
         number_text = self._board.mark(number)
@@ -899,24 +992,70 @@ class SudokuSolver:
         areas_text = ', '.join(f'{area}' for area in areas)
         orth_areas_text = ', '.join(f'{position + 1}' for position in positions)
         if len(positions) < level:
-            print(f'{indent}[Paradox @ Linked Deduce L{level}] number "{number_text}"'
-                  f' TODO {area_type} [{areas_text}], {orth_area_type} [{orth_areas_text}]')
+            print(f'{indent}[Paradox @ Linked Deduce L{level}] number "{number_text}" in {area_type}s [{areas_text}],'
+                  f' appear in only {len(positions)} {orth_area_type}s [{orth_areas_text}]')
         else:
-            print(f'{indent}[Linked Deduce L{level}] number "{number_text}"'
-                  f' TODO {area_type} [{areas_text}], {orth_area_type} [{orth_areas_text}]')
+            print(f'{indent}[Linked Deduce L{level}] number "{number_text}" in {area_type}s [{areas_text}],'
+                  f' appear in exactly {level} {orth_area_type}s [{orth_areas_text}]')
+
+        if msg_level < DeduceMsgLevel.BOARD:
+            return
+
+        status.puzzle.print(self._board, self.board_border_enabled)
 
     def _show_guess_msg(self, status: SolvingStatus, cell: Cell, value: int):
+        msg_level = self.guess_msg_level
+        if msg_level < DeduceMsgLevel.GUESS:
+            return
+
         indent = self._get_msg_indent(status)
         level = status.guess_depth + 1
         value_text = self._board.mark(value)
         print(f'{indent}[Guess L{level}] assume cell {cell} value is "{value_text}"')
 
     def _show_guess_success_msg(self, status: SolvingStatus):
+        msg_level = self.guess_msg_level
+        if msg_level < DeduceMsgLevel.GUESS:
+            return
+
         indent = self._get_msg_indent(status)
         print(f'{indent}[Guess Success] find a solution')
 
 
-def test(args):
+def create_arg_parser() -> argparse.ArgumentParser:
+    strtobool = lambda s: bool(distutils.util.strtobool(s))
+    parser = argparse.ArgumentParser(description='Deductive Sudoku Solver')
+    parser.add_argument('puzzle_file', nargs='?',
+                        help='puzzle file')
+
+    board_group = parser.add_argument_group('puzzle arguments')
+    board_group.add_argument('--block-width', type=int, default=3,
+                             help='how many columns a block contains (default: 3)')
+    board_group.add_argument('--block-height', type=int, default=3,
+                             help='how many rows a block contains (default: 3)')
+    board_group.add_argument('--cell-values', default=f'123456789{string.ascii_uppercase}',
+                             help='')
+
+    rule_group = parser.add_argument_group('deduce rule arguments')
+    for rule in ('naked', 'hidden', 'linked'):
+        rule_group.add_argument(f'--{rule}-deduce', type=int)
+
+    rule_group.add_argument('--lower-level-first', type=strtobool, nargs='?', const=True, default=True)
+    rule_group.add_argument('--guess', type=strtobool, nargs='?', const=True, default=True)
+    rule_group.add_argument('--max-solutions', type=int, default=2)
+
+    output_group = parser.add_argument_group('output arguments')
+    output_group.add_argument('--deduce-msg', type=DeduceMsgLevel.parse,
+                              choices=[DeduceMsgLevel.NONE, DeduceMsgLevel.DEDUCE, DeduceMsgLevel.BOARD],
+                              default=DeduceMsgLevel.DEDUCE)
+    output_group.add_argument('--guess-msg', type=DeduceMsgLevel.parse,
+                              choices=list(DeduceMsgLevel), default=DeduceMsgLevel.GUESS)
+    output_group.add_argument('--better-print', type=strtobool, nargs='?', const=True, default=True)
+
+    return parser
+
+
+def create_solver(args) -> SudokuSolver:
     board = Board(block_width=args.block_width, block_height=args.block_height)
     board.mapping = args.cell_values
 
@@ -924,6 +1063,9 @@ def test(args):
     solver.lower_level_deduce_first = args.lower_level_first
     solver.guess_enabled = args.guess
     solver.max_solutions_count = args.max_solutions
+    solver.deduce_msg_level = args.deduce_msg
+    solver.guess_msg_level = args.guess_msg
+    solver.board_border_enabled = args.better_print
 
     if args.naked_deduce == 0:
         solver.naked_deduce_enabled = False
@@ -940,6 +1082,10 @@ def test(args):
     elif args.linked_deduce is not None:
         solver.max_linked_deduce_level = args.linked_deduce
 
+    return solver
+
+
+def load_puzzle(args, board: Board) -> BoardData:
     def iter_puzzle_lines(file):
         for line in file:
             line = line.strip(' \r\n')
@@ -964,12 +1110,34 @@ def test(args):
                 if value is not None:
                     puzzle.acknowledge_cell(cell, value)
 
-    puzzle.print_simple(board)
-    # puzzle.print_confirmed(board)
-    puzzle.print_with_candidates(board)
+    return puzzle
+
+
+def main():
+    parser = create_arg_parser()
+    args = parser.parse_args()
+    # print(args)
+    board_size = args.block_width * args.block_height
+    if len(args.cell_values) < board_size:
+        raise ValueError(f'each area of the board contains {board_size} cells,'
+                         f' but only {len(args.cell_values)} values provided')
+
+    solver = create_solver(args)
+    board = solver.board
+    puzzle = load_puzzle(args, board)
+
+    print('The puzzle is:')
+    puzzle.print(board, args.better_print)
 
     status = solver.solve(puzzle)
-    puzzle.print_confirmed(board)
+    if puzzle.solved():
+        puzzle.print(board, args.better_print)
+    elif status.solutions:
+        for solution in status.solutions:
+            solution.data.print(board, args.better_print)
+    else:
+        # No solution.
+        pass
 
     if solver.naked_deduce_enabled:
         print(f'useless naked deduce: {status.useless_naked_deduce}')
@@ -977,42 +1145,6 @@ def test(args):
         print(f'useless hidden deduce: {status.useless_hidden_deduce}')
     if solver.linked_deduce_enabled:
         print(f'useless linked deduce: {status.useless_linked_deduce}')
-
-
-def main():
-    strtobool = lambda s: bool(distutils.util.strtobool(s))
-    parser = argparse.ArgumentParser(description='Deductive Sudoku Solver')
-    parser.add_argument('puzzle_file', nargs='?',
-                        help='puzzle file')
-
-    board_group = parser.add_argument_group('puzzle arguments')
-    board_group.add_argument('--block-width', type=int, default=3,
-                             help='how many columns a block contains (default: 3)')
-    board_group.add_argument('--block-height', type=int, default=3,
-                             help='how many rows a block contains (default: 3)')
-    board_group.add_argument('--cell-values', default=f'123456789{string.ascii_uppercase}',
-                             help='')
-
-    rule_group = parser.add_argument_group('deduce rule arguments')
-    for rule in ('naked', 'hidden', 'linked'):
-        rule_group.add_argument(f'--{rule}-deduce', type=int)
-
-    rule_group.add_argument('--lower-level-first',
-                            type=strtobool, nargs='?', const=True, default=True)
-    rule_group.add_argument('--guess',
-                            type=strtobool, nargs='?', const=True, default=True)
-    rule_group.add_argument('--max-solutions', type=int, default=10)
-
-    output_group = parser.add_argument_group('output arguments')
-    output_group.add_argument('--foo')
-
-    args = parser.parse_args()
-    board_size = args.block_width * args.block_height
-    if len(args.cell_values) < board_size:
-        raise ValueError(f'each area of the board contains {board_size} cells,'
-                         f' but only {len(args.cell_values)} values provided')
-
-    test(args)
 
 
 if __name__ == '__main__':
