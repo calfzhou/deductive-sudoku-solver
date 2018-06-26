@@ -10,7 +10,7 @@
 
 A very simple puzzle. Can be solved using primary check only.
 
---deduce=false --guess=false
+--guess=false --deduce=false
 
 ```
 4 2 8  3 7 9  1 6 5
