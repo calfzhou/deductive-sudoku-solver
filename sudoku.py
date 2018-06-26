@@ -1024,7 +1024,7 @@ class SudokuSolver:
 
 def create_arg_parser() -> argparse.ArgumentParser:
     strtobool = lambda s: bool(distutils.util.strtobool(s))
-    parser = argparse.ArgumentParser(description='Deductive Sudoku Solver')
+    parser = argparse.ArgumentParser(description='Deductive Sudoku Solver', allow_abbrev=False)
     parser.add_argument('puzzle_file', nargs='?',
                         help='puzzle file')
 
@@ -1041,6 +1041,7 @@ def create_arg_parser() -> argparse.ArgumentParser:
         rule_group.add_argument(f'--{rule}-deduce', type=int)
 
     rule_group.add_argument('--lower-level-first', type=strtobool, nargs='?', const=True, default=True)
+    rule_group.add_argument('--deduce', type=strtobool, nargs='?', const=True, default=True)
     rule_group.add_argument('--guess', type=strtobool, nargs='?', const=True, default=True)
     rule_group.add_argument('--max-solutions', type=int, default=2)
 
@@ -1067,19 +1068,27 @@ def create_solver(args) -> SudokuSolver:
     solver.guess_msg_level = args.guess_msg
     solver.board_border_enabled = args.better_print
 
+    if not args.deduce:
+        solver.naked_deduce_enabled = False
+        solver.hidden_deduce_enabled = False
+        solver.linked_deduce_enabled = False
+
     if args.naked_deduce == 0:
         solver.naked_deduce_enabled = False
     elif args.naked_deduce is not None:
+        solver.naked_deduce_enabled = True
         solver.max_naked_deduce_level = args.naked_deduce
 
     if args.hidden_deduce == 0:
         solver.hidden_deduce_enabled = False
     elif args.hidden_deduce is not None:
+        solver.hidden_deduce_enabled = True
         solver.max_hidden_deduce_level = args.hidden_deduce
 
     if args.linked_deduce == 0:
         solver.linked_deduce_enabled = False
     elif args.linked_deduce is not None:
+        solver.linked_deduce_enabled = True
         solver.max_linked_deduce_level = args.linked_deduce
 
     return solver
@@ -1131,20 +1140,24 @@ def main():
 
     status = solver.solve(puzzle)
     if puzzle.solved():
+        print('Solved by deduction:')
         puzzle.print(board, args.better_print)
     elif status.solutions:
+        print(f'Solved by guessing, find {len(status.solutions)} solutions:')
         for solution in status.solutions:
             solution.data.print(board, args.better_print)
-    else:
-        # No solution.
-        pass
 
-    if solver.naked_deduce_enabled:
-        print(f'useless naked deduce: {status.useless_naked_deduce}')
-    if solver.hidden_deduce_enabled:
-        print(f'useless hidden deduce: {status.useless_hidden_deduce}')
-    if solver.linked_deduce_enabled:
-        print(f'useless linked deduce: {status.useless_linked_deduce}')
+        if status.interrupted:
+            print('There might be more solutions not found.')
+    else:
+        print('Not solved.')
+
+    # if solver.naked_deduce_enabled:
+    #     print(f'useless naked deduce: {status.useless_naked_deduce}')
+    # if solver.hidden_deduce_enabled:
+    #     print(f'useless hidden deduce: {status.useless_hidden_deduce}')
+    # if solver.linked_deduce_enabled:
+    #     print(f'useless linked deduce: {status.useless_linked_deduce}')
 
 
 if __name__ == '__main__':
