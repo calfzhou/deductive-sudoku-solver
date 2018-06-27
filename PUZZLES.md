@@ -1,12 +1,43 @@
 # List of Puzzles
 
-* [001](puzzles/001.txt):
-A very simple puzzle, can be solved using primary check only.
-* [002](puzzles/002.txt):
-* [003](puzzles/003.txt):
-* [004](puzzles/004.txt):
-* [005](puzzles/005.txt):
-* [006](puzzles/006.txt):
-* [007](puzzles/007.txt):
-* [008](puzzles/008.txt):
-* [009](puzzles/009.txt):
+## Puzzle Categories
+
+* A: primary check only
+* B: naked & hidden deduce only
+* C: need linked deduce
+* D: need key-number deduce - not implemented
+* X: must guess, but single solution
+* Y: multiple solutions
+* Z: no solution
+
+## Category A
+
+* [01](puzzles/a01.txt):
+  A very simple puzzle, can be solved using primary check only.
+
+## Category B
+
+* [01](puzzles/b01.txt):
+* [02](puzzles/b02.txt):
+* [03](puzzles/b03.txt):
+
+## Category C
+
+* [01](puzzles/c01.txt):
+* [02](puzzles/c02.txt):
+* [03](puzzles/c03.txt):
+
+## Category D
+
+* [d01](puzzles/d01.txt):
+* [d02](puzzles/d02.txt):
+
+## Category X
+
+* [x01](puzzles/x01.txt):
+
+## Category Y
+
+* [y01](puzzles/y01.txt):
+
+## Category Z

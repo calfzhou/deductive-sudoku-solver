@@ -691,6 +691,7 @@ class SudokuSolver:
                     solution = GuessedSolution(copy.deepcopy(status.guesses), status.puzzle)
                     status.solutions.append(solution)
                     if len(status.solutions) >= self.max_solutions_count:
+                        status.interrupted = True
                         raise StopGuessing
                 else:
                     self._guess(status)
@@ -1146,6 +1147,7 @@ def main():
         print(f'Solved by guessing, find {len(status.solutions)} solutions:')
         for solution in status.solutions:
             solution.data.print(board, args.better_print)
+            print()
 
         if status.interrupted:
             print('There might be more solutions not found.')

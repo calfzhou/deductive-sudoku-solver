@@ -8,10 +8,10 @@
 ***2*****
 ****1*8**
 
-Need hidden L2 or naked L5.
+Need naked L5 or hidden L2.
 
---guess=false --deduce=false --hidden-deduce=2
 --guess=false --deduce=false --naked-deduce=5
+--guess=false --deduce=false --hidden-deduce=2
 
 6 1 9  4 8 5  3 2 7
 4 5 7  1 2 3  6 9 8
