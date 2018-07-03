@@ -29,15 +29,15 @@
 
 ## Category D
 
-* [d01](puzzles/d01.txt):
-* [d02](puzzles/d02.txt):
+* [01](puzzles/d01.txt):
+* [02](puzzles/d02.txt):
 
 ## Category X
 
-* [x01](puzzles/x01.txt):
+* [01](puzzles/x01.txt):
 
 ## Category Y
 
-* [y01](puzzles/y01.txt):
+* [01](puzzles/y01.txt):
 
 ## Category Z
