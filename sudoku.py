@@ -1027,32 +1027,53 @@ def create_arg_parser() -> argparse.ArgumentParser:
     strtobool = lambda s: bool(distutils.util.strtobool(s))
     parser = argparse.ArgumentParser(description='Deductive Sudoku Solver', allow_abbrev=False)
     parser.add_argument('puzzle_file', nargs='?',
-                        help='puzzle file')
+                        help='a file contains a sudoku puzzle, see puzzles/*.txt for example.'
+                        ' If omitted, read puzzle from stdin.')
 
-    board_group = parser.add_argument_group('puzzle arguments')
+    board_group = parser.add_argument_group(
+        'board arguments',
+        description='The size (edge length) of the board is BLOCK_WIDTH * BLOCK_HEIGHT.')
     board_group.add_argument('--block-width', type=int, default=3,
                              help='how many columns a block contains (default: 3)')
     board_group.add_argument('--block-height', type=int, default=3,
                              help='how many rows a block contains (default: 3)')
     board_group.add_argument('--cell-values', default=f'123456789{string.ascii_uppercase}',
-                             help='')
+                             help='a string contains all marks for every cell value (default: "1..9A..Z")')
 
     rule_group = parser.add_argument_group('deduce rule arguments')
+    rule_group.add_argument('--deduce', type=strtobool,
+                            nargs='?', const=True, default=True, choices=[True, False],
+                            help='whether enable deduce (set to `false` to disable all deduce rules,'
+                            ' then enable specific rule by corresponding deduce level arguments) (default: true)')
     for rule in ('naked', 'hidden', 'linked'):
-        rule_group.add_argument(f'--{rule}-deduce', type=int)
+        rule_group.add_argument(f'--{rule}-deduce', type=int,
+                                help=f'the max level of {rule} rule, use 0 to disable it')
+    rule_group.add_argument('--lower-level-first', type=strtobool,
+                            nargs='?', const=True, default=True, choices=[True, False],
+                            help='whether always prefer lower level deduce if possible,'
+                            ' can decrease the number of deduce steps and increase deduce speed'
+                            ' (default: true)')
+    rule_group.add_argument('--guess', type=strtobool,
+                            nargs='?', const=True, default=True, choices=[True, False],
+                            help='whether enable guess when then puzzle cannot be solved by deducing (default: true)')
+    rule_group.add_argument('--max-solutions', type=int, default=2,
+                            help='when solving by guessing, stop guessing when the given number of solutions'
+                            ' are found (default: 2)')
 
-    rule_group.add_argument('--lower-level-first', type=strtobool, nargs='?', const=True, default=True)
-    rule_group.add_argument('--deduce', type=strtobool, nargs='?', const=True, default=True)
-    rule_group.add_argument('--guess', type=strtobool, nargs='?', const=True, default=True)
-    rule_group.add_argument('--max-solutions', type=int, default=2)
-
-    output_group = parser.add_argument_group('output arguments')
+    output_group = parser.add_argument_group(
+        'output arguments',
+        description='Message levels: none - no message will be print; guess - only print guess operation;'
+        ' deduce - print deduce message; board - print board data after each deduce step.')
     output_group.add_argument('--deduce-msg', type=DeduceMsgLevel.parse,
                               choices=[DeduceMsgLevel.NONE, DeduceMsgLevel.DEDUCE, DeduceMsgLevel.BOARD],
-                              default=DeduceMsgLevel.DEDUCE)
+                              default=DeduceMsgLevel.DEDUCE,
+                              help='deduce message level (default: deduce)')
     output_group.add_argument('--guess-msg', type=DeduceMsgLevel.parse,
-                              choices=list(DeduceMsgLevel), default=DeduceMsgLevel.GUESS)
-    output_group.add_argument('--better-print', type=strtobool, nargs='?', const=True, default=True)
+                              choices=list(DeduceMsgLevel), default=DeduceMsgLevel.GUESS,
+                              help='guess message level (default: guess)')
+    output_group.add_argument('--better-print', type=strtobool,
+                             nargs='?', const=True, default=True, choices=[True, False],
+                             help='print puzzle in board format (with cell border) instead of plain format (default: true)')
 
     return parser
 
