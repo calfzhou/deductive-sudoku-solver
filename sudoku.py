@@ -1027,8 +1027,8 @@ def create_arg_parser() -> argparse.ArgumentParser:
     strtobool = lambda s: bool(distutils.util.strtobool(s))
     parser = argparse.ArgumentParser(description='Deductive Sudoku Solver', allow_abbrev=False)
     parser.add_argument('puzzle_file', nargs='?',
-                        help='a file contains a sudoku puzzle, see puzzles/*.txt for example.'
-                        ' If omitted, read puzzle from stdin.')
+                        help='a file contains the sudoku puzzle, see puzzles/*.txt for example'
+                        ' (default: read from stdin)')
 
     board_group = parser.add_argument_group(
         'board arguments',
@@ -1037,7 +1037,7 @@ def create_arg_parser() -> argparse.ArgumentParser:
                              help='how many columns a block contains (default: 3)')
     board_group.add_argument('--block-height', type=int, default=3,
                              help='how many rows a block contains (default: 3)')
-    board_group.add_argument('--cell-values', default=f'123456789{string.ascii_uppercase}',
+    board_group.add_argument('--marks', default=f'123456789{string.ascii_uppercase}',
                              help='a string contains all marks for every cell value (default: "1..9A..Z")')
 
     rule_group = parser.add_argument_group('deduce rule arguments')
@@ -1080,7 +1080,7 @@ def create_arg_parser() -> argparse.ArgumentParser:
 
 def create_solver(args) -> SudokuSolver:
     board = Board(block_width=args.block_width, block_height=args.block_height)
-    board.mapping = args.cell_values
+    board.mapping = args.marks
 
     solver = SudokuSolver(board)
     solver.lower_level_deduce_first = args.lower_level_first
@@ -1149,9 +1149,9 @@ def main():
     args = parser.parse_args()
     # print(args)
     board_size = args.block_width * args.block_height
-    if len(args.cell_values) < board_size:
+    if len(args.marks) < board_size:
         raise ValueError(f'each area of the board contains {board_size} cells,'
-                         f' but only {len(args.cell_values)} values provided')
+                         f' but only {len(args.marks)} marks provided')
 
     solver = create_solver(args)
     board = solver.board
