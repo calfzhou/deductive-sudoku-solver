@@ -1,1 +1,1 @@
-# deductive-sudoku-solver
+# Deductive Sudoku Solver
