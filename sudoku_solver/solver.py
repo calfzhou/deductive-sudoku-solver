@@ -29,6 +29,16 @@ class GuessedSolution(typing.NamedTuple):
     data: BoardData
 
 
+class DeduceRule(enum.Enum):
+    NAKED = enum.auto()
+    HIDDEN = enum.auto()
+    LINKED = enum.auto()
+
+    def __str__(self):
+        self.name: str
+        return self.name.lower()
+
+
 class DeduceMsgLevel(enum.IntEnum):
     NONE = enum.auto()
     GUESS = enum.auto()
@@ -51,9 +61,13 @@ class SolvingStatus:
         self.solutions: typing.List[GuessedSolution] = []
         self.interrupted = False
 
-        self.useless_naked_deduce = [0] * puzzle.board_size
-        self.useless_hidden_deduce = [0] * puzzle.board_size
-        self.useless_linked_deduce = [0] * puzzle.board_size
+        self.useless_naked_deduce = [0] * puzzle.board.size
+        self.useless_hidden_deduce = [0] * puzzle.board.size
+        self.useless_linked_deduce = [0] * puzzle.board.size
+
+    @property
+    def board(self) -> Board:
+        return self.puzzle.board
 
     @property
     def guessing(self) -> bool:
@@ -65,18 +79,8 @@ class SolvingStatus:
 
 
 class SudokuSolver:
-    def __init__(self, board: Board):
-        self._board = board
-
-        self.naked_deduce_enabled = True
-        self.max_naked_deduce_level = board.size - 1
-
-        self.hidden_deduce_enabled = True
-        self.max_hidden_deduce_level = board.size - 1
-
-        self.linked_deduce_enabled = True
-        self.max_linked_deduce_level = board.size - 1
-
+    def __init__(self):
+        self.max_deduce_levels = {rule: -1 for rule in DeduceRule}
         self.lower_level_deduce_first = True
 
         self.guess_enabled = True
@@ -86,16 +90,12 @@ class SudokuSolver:
         self.guess_msg_level = DeduceMsgLevel.DEDUCE
         self.board_border_enabled = True
 
-    @property
-    def board(self):
-        return self._board
-
     def solve(self, puzzle: BoardData) -> SolvingStatus:
         status = SolvingStatus(puzzle)
         self._deduce(status)
         if not puzzle.solved() and self.guess_enabled:
             print('Deduce finished but not solved the puzzle, try guessing.')
-            # puzzle.print(self._board, self.board_border_enabled)
+            # puzzle.print(self.board_border_enabled)
             try:
                 self._guess(status)
             except StopGuessing:
@@ -111,20 +111,34 @@ class SudokuSolver:
         except DeduceFinished:
             pass
 
+    def disable_deduce(self):
+        for rule in self.max_deduce_levels:
+            self.max_deduce_levels[rule] = 0
+
+    def _get_rule_max_level(self, rule: DeduceRule, puzzle: BoardData) -> int:
+        max_level = self.max_deduce_levels[rule]
+        if max_level == 0:
+            return 0
+        elif max_level == -1:
+            return puzzle.board.size
+        else:
+            return max_level
+
     def _deduce_one_round(self, status: SolvingStatus) -> bool:
+        puzzle = status.puzzle
         improved = False
         improved = self._primary_check(status) or improved
         if improved and self.lower_level_deduce_first:
             return improved
 
-        for level in range(1, self._board.size):
-            if self.naked_deduce_enabled and 2 <= level <= self.max_naked_deduce_level:
+        for level in range(1, status.board.size):
+            if 2 <= level <= self._get_rule_max_level(DeduceRule.NAKED, puzzle):
                 improved = self._naked_deduce(level, status) or improved
 
-            if self.hidden_deduce_enabled and 1 <= level <= self.max_hidden_deduce_level:
+            if 1 <= level <= self._get_rule_max_level(DeduceRule.HIDDEN, puzzle):
                 improved = self._hidden_deduce(level, status) or improved
 
-            if self.linked_deduce_enabled and 2 <= level <= self.max_linked_deduce_level:
+            if 2 <= level <= self._get_rule_max_level(DeduceRule.LINKED, puzzle):
                 improved = self._linked_deduce(level, AreaType.ROW, status) or improved
                 improved = self._linked_deduce(level, AreaType.COLUMN, status) or improved
 
@@ -163,8 +177,8 @@ class SudokuSolver:
 
     def _choose_guessing_cell(self, puzzle: BoardData) -> Cell:
         cell_for_guessing = None
-        min_candidates_count = self._board.size + 1
-        for cell in self._board.iter_cells():
+        min_candidates_count = puzzle.board.size + 1
+        for cell in puzzle.board.iter_cells():
             if puzzle.is_cell_confirmed(cell):
                 continue
 
@@ -181,7 +195,7 @@ class SudokuSolver:
     def _primary_check(self, status: SolvingStatus) -> bool:
         puzzle = status.puzzle
         improved = False
-        for cell in self._board.iter_cells():
+        for cell in puzzle.board.iter_cells():
             if puzzle.is_cell_confirmed(cell):
                 continue
 
@@ -222,7 +236,7 @@ class SudokuSolver:
             return True
 
         improved = False
-        for area in self._board.iter_areas():
+        for area in puzzle.board.iter_areas():
             # for each L-combinations
             all_cells = [cell for cell in area.iter_cells() if is_useful(cell)]
             for cells in itertools.combinations(all_cells, level):
@@ -243,7 +257,7 @@ class SudokuSolver:
                 # get containing areas.
                 # remove candidates from other cells.
                 result = False
-                for cell_area in self._board.iter_common_areas(cells):
+                for cell_area in puzzle.board.iter_common_areas(cells):
                     result = puzzle.remove_candidates(candidates, cell_area.iter_cells(excludes=cells)) or result
                     for cell in cells:
                         puzzle.confirm_naked_level(cell_area, cell, level)
@@ -265,7 +279,7 @@ class SudokuSolver:
 
     def _hidden_deduce(self, level: int, status: SolvingStatus):
         puzzle = status.puzzle
-        level_ex = max(level, self._board.block_width, self._board.block_height)
+        level_ex = max(level, puzzle.board.block_width, puzzle.board.block_height)
         def is_useful(number: int) -> bool:
             if puzzle.get_hidden_confirm_level(area, number) <= level:
                 return False
@@ -274,9 +288,9 @@ class SudokuSolver:
             return True
 
         improved = False
-        for area in self._board.iter_areas():
+        for area in puzzle.board.iter_areas():
             # for each L-combinations
-            all_numbers = [number for number in self._board.iter_numbers() if is_useful(number)]
+            all_numbers = [number for number in puzzle.board.iter_numbers() if is_useful(number)]
             for numbers in itertools.combinations(all_numbers, level):
                 if not all(map(is_useful, numbers)):
                     continue
@@ -292,13 +306,13 @@ class SudokuSolver:
                     raise ParadoxError
                 elif len(positions) > level_ex:
                     continue
-                elif area.area_type == AreaType.ROW and len(positions) > max(level, self._board.block_width):
+                elif area.area_type == AreaType.ROW and len(positions) > max(level, puzzle.board.block_width):
                     continue
-                elif area.area_type == AreaType.COLUMN and len(positions) > max(level, self._board.block_height):
+                elif area.area_type == AreaType.COLUMN and len(positions) > max(level, puzzle.board.block_height):
                     continue
 
                 result = False
-                for cell_area in self._board.iter_common_areas(cells):
+                for cell_area in puzzle.board.iter_common_areas(cells):
                     if cell_area == area:
                         if len(cells) == level:
                             result = puzzle.retain_candidates(numbers, cells) or result
@@ -338,9 +352,9 @@ class SudokuSolver:
 
         orth_area_type = area_type.orthogonal_type()
         improved = False
-        for number in self._board.iter_numbers():
+        for number in puzzle.board.iter_numbers():
             # for each L-combinations
-            all_areas = [area for area in self._board.iter_areas(area_type) if is_useful(area)]
+            all_areas = [area for area in puzzle.board.iter_areas(area_type) if is_useful(area)]
             for areas in itertools.combinations(all_areas, level):
                 if not all(map(is_useful, areas)):
                     continue
@@ -358,7 +372,7 @@ class SudokuSolver:
                 result = False
                 # for each of them, remove candidates(number, col/row - row/col交点)
                 for position in positions:
-                    orthogonal_area = self._board.get_area(orth_area_type, position)
+                    orthogonal_area = puzzle.board.get_area(orth_area_type, position)
                     result = puzzle.remove_candidates(number, orthogonal_area.iter_cells(excludes=areas)) or result
                     puzzle.confirm_linked_level(orthogonal_area, number, level)
 
@@ -390,13 +404,13 @@ class SudokuSolver:
         if value is None:
             print(f'{indent}[Paradox @ Primary Check] cell {cell} has no candidate')
         else:
-            value_text = self._board.mark(value)
+            value_text = status.board.mark(value)
             print(f'{indent}[Primary Check] cell {cell} has single candidate "{value_text}"')
 
         if msg_level < DeduceMsgLevel.BOARD:
             return
 
-        status.puzzle.print(self._board, self.board_border_enabled)
+        status.puzzle.print(self.board_border_enabled)
 
     def _show_naked_deduce_msg(self, status: SolvingStatus, area: Area,
                                cells: typing.Iterable[Cell], candidates: typing.Iterable[int]):
@@ -407,7 +421,7 @@ class SudokuSolver:
         indent = self._get_msg_indent(status)
         level = len(cells)
         cells_text = ', '.join(f'{cell}' for cell in cells)
-        candidates_text = ', '.join(f'"{self._board.mark(number)}"' for number in candidates)
+        candidates_text = ', '.join(f'"{status.board.mark(number)}"' for number in candidates)
         if len(candidates) < level:
             print(f'{indent}[Paradox @ Naked Deduce L{level}] in {area.area_type} {area},'
                   f' cells [{cells_text}] have only {len(candidates)} candidates [{candidates_text}]')
@@ -418,7 +432,7 @@ class SudokuSolver:
         if msg_level < DeduceMsgLevel.BOARD:
             return
 
-        status.puzzle.print(self._board, self.board_border_enabled)
+        status.puzzle.print(self.board_border_enabled)
 
     def _show_hidden_deduce_msg(self, status: SolvingStatus, area: Area,
                                 numbers: typing.Iterable[int], cells: typing.Iterable[Cell]):
@@ -429,7 +443,7 @@ class SudokuSolver:
         indent = self._get_msg_indent(status)
         level = len(numbers)
         exactly = 'exactly ' if len(cells) == level else ''
-        numbers_text = ', '.join(f'"{self._board.mark(number)}"' for number in numbers)
+        numbers_text = ', '.join(f'"{status.board.mark(number)}"' for number in numbers)
         cells_text = ', '.join(f'{cell}' for cell in cells)
         if len(cells) < level:
             print(f'{indent}[Paradox @ Hidden Deduce L{level}] in {area.area_type} {area},'
@@ -441,7 +455,7 @@ class SudokuSolver:
         if msg_level < DeduceMsgLevel.BOARD:
             return
 
-        status.puzzle.print(self._board, self.board_border_enabled)
+        status.puzzle.print(self.board_border_enabled)
 
     def _show_linked_deduce_msg(self, status: SolvingStatus, number: int, area_type: AreaType,
                                 areas: typing.Iterable[Area], positions: typing.Iterable[int]):
@@ -451,7 +465,7 @@ class SudokuSolver:
 
         indent = self._get_msg_indent(status)
         level = len(areas)
-        number_text = self._board.mark(number)
+        number_text = status.board.mark(number)
         orth_area_type = area_type.orthogonal_type()
         areas_text = ', '.join(f'{area}' for area in areas)
         orth_areas_text = ', '.join(f'{position + 1}' for position in positions)
@@ -465,7 +479,7 @@ class SudokuSolver:
         if msg_level < DeduceMsgLevel.BOARD:
             return
 
-        status.puzzle.print(self._board, self.board_border_enabled)
+        status.puzzle.print(self.board_border_enabled)
 
     def _show_guess_msg(self, status: SolvingStatus, cell: Cell, value: int):
         msg_level = self.guess_msg_level
@@ -474,7 +488,7 @@ class SudokuSolver:
 
         indent = self._get_msg_indent(status)
         level = status.guess_depth + 1
-        value_text = self._board.mark(value)
+        value_text = status.board.mark(value)
         print(f'{indent}[Guess L{level}] assume cell {cell} value is "{value_text}"')
 
     def _show_guess_success_msg(self, status: SolvingStatus):
