@@ -12,10 +12,8 @@ Cannot be solved using only naked and hidden deduce.
 
 Need linked L2, plus naked and/or hidden deduce.
 
---guess=false --deduce=false --linked-deduce=2 --naked-deduce=3
---guess=false --deduce=false --linked-deduce=2 --hidden-deduce=3
-
-TODO: Should work by linked L2 + naked L2, or linked L2 + hidden L1.
+--guess=false --deduce=false --linked-deduce=2 --naked-deduce=2
+--guess=false --deduce=false --linked-deduce=2 --hidden-deduce=1
 
 4 6 2  1 8 3  7 5 9
 9 1 5  2 7 4  8 3 6

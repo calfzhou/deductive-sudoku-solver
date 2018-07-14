@@ -379,6 +379,7 @@ class SudokuSolver:
                 for area in areas:
                     puzzle.confirm_linked_level(area, number, level)
 
+                improved = result or improved
                 if result:
                     self._show_linked_deduce_msg(status, number, area_type, areas, positions)
                 else:
