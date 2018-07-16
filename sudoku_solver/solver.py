@@ -94,8 +94,9 @@ class SudokuSolver:
         status = SolvingStatus(puzzle)
         self._deduce(status)
         if not puzzle.solved() and self.guess_enabled:
-            print('Deduce finished but not solved the puzzle, try guessing.')
-            # puzzle.print(self.board_border_enabled)
+            if self.deduce_msg_level > DeduceMsgLevel.NONE:
+                print('Deduce finished but not solved the puzzle, try guessing.')
+
             try:
                 self._guess(status)
             except StopGuessing:

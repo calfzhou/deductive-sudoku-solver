@@ -1,0 +1,109 @@
+{
+  "a01_min": {
+    "cmd_line": "puzzles/a01.txt --guess=false --deduce=false",
+    "solved": true
+  },
+  "b01_fail": {
+    "cmd_line": "puzzles/b01.txt --guess=false --deduce=false --naked-deduce=2",
+    "solved": false
+  },
+  "b01_min_naked": {
+    "cmd_line": "puzzles/b01.txt --guess=false --deduce=false --naked-deduce=3",
+    "solved": true
+  },
+  "b01_min_hidden": {
+    "cmd_line": "puzzles/b01.txt --guess=false --deduce=false --hidden-deduce=1",
+    "solved": true
+  },
+  "b02_fail": {
+    "cmd_line": "puzzles/b02.txt --guess=false --deduce=false --naked-deduce=4 --hidden-deduce=1",
+    "solved": false
+  },
+  "b02_min_naked": {
+    "cmd_line": "puzzles/b02.txt --guess=false --deduce=false --naked-deduce=5",
+    "solved": true
+  },
+  "b02_min_hidden": {
+    "cmd_line": "puzzles/b02.txt --guess=false --deduce=false --hidden-deduce=2",
+    "solved": true
+  },
+  "b03_fail": {
+    "cmd_line": "puzzles/b03.txt --guess=false --deduce=false --naked-deduce=2 --hidden-deduce=3",
+    "solved": false
+  },
+  "b03_min_naked": {
+    "cmd_line": "puzzles/b03.txt --guess=false --deduce=false --naked-deduce=3",
+    "solved": true
+  },
+  "b03_min_hidden": {
+    "cmd_line": "puzzles/b03.txt --guess=false --deduce=false --hidden-deduce=4",
+    "solved": true
+  },
+  "c01_fail": {
+    "cmd_line": "puzzles/c01.txt --guess=false --deduce=false --naked-deduce=-1 --hidden-deduce=-1",
+    "solved": false
+  },
+  "c01_min_naked": {
+    "cmd_line": "puzzles/c01.txt --guess=false --deduce=false --linked-deduce=2 --naked-deduce=3",
+    "solved": true
+  },
+  "c01_min_hidden": {
+    "cmd_line": "puzzles/c01.txt --guess=false --deduce=false --linked-deduce=2 --hidden-deduce=1",
+    "solved": true
+  },
+  "c02_fail": {
+    "cmd_line": "puzzles/c02.txt --guess=false --deduce=false --naked-deduce=-1 --hidden-deduce=-1",
+    "solved": false
+  },
+  "c02_min_naked": {
+    "cmd_line": "puzzles/c02.txt --guess=false --deduce=false --linked-deduce=2 --naked-deduce=2",
+    "solved": true
+  },
+  "c02_min_hidden": {
+    "cmd_line": "puzzles/c02.txt --guess=false --deduce=false --linked-deduce=2 --hidden-deduce=1",
+    "solved": true
+  },
+  "c03_fail": {
+    "cmd_line": "puzzles/c03.txt --guess=false --deduce=false --naked-deduce=-1 --hidden-deduce=-1",
+    "solved": false
+  },
+  "c03_min_naked": {
+    "cmd_line": "puzzles/c03.txt --guess=false --deduce=false --linked-deduce=3 --naked-deduce=5 --hidden-deduce=1",
+    "solved": true
+  },
+  "c03_min_hidden": {
+    "cmd_line": "puzzles/c03.txt --guess=false --deduce=false --linked-deduce=3 --hidden-deduce=4",
+    "solved": true
+  },
+  "d01_fail": {
+    "cmd_line": "puzzles/d01.txt --guess=false --deduce=false --naked-deduce=-1 --hidden-deduce=-1 --linked-deduce=-1",
+    "solved": false,
+    "solutions_count": 0
+  },
+  "d01_guess": {
+    "cmd_line": "puzzles/d01.txt --guess=true --deduce=true --max-solutions=2",
+    "solved": false,
+    "solutions_count": 1
+  },
+  "d02_fail": {
+    "cmd_line": "puzzles/d02.txt --guess=false --deduce=false --naked-deduce=-1 --hidden-deduce=-1 --linked-deduce=-1",
+    "solved": false,
+    "solutions_count": 0
+  },
+  "d02_guess": {
+    "cmd_line": "puzzles/d02.txt --guess=true --deduce=true --max-solutions=2",
+    "solved": false,
+    "solutions_count": 1
+  },
+  "x01_guess": {
+    "cmd_line": "puzzles/x01.txt --guess=true --deduce=true --max-solutions=2",
+    "solved": false,
+    "solutions_count": 1
+  },
+  "y01_guess": {
+    "cmd_line": "puzzles/y01.txt --guess=true --deduce=true --max-solutions=3",
+    "solved": false,
+    "solutions_count": 3,
+    "interrupted": true
+  }
+}
