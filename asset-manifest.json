@@ -1,0 +1,16 @@
+{
+  "files": {
+    "main.css": "/deductive-sudoku-solver/static/css/main.073c9b0a.css",
+    "main.js": "/deductive-sudoku-solver/static/js/main.6ade1f40.js",
+    "static/js/787.c77c1a08.chunk.js": "/deductive-sudoku-solver/static/js/787.c77c1a08.chunk.js",
+    "static/media/logo.svg": "/deductive-sudoku-solver/static/media/logo.6ce24c58023cc2f8fd88fe9d219db6c6.svg",
+    "index.html": "/deductive-sudoku-solver/index.html",
+    "main.073c9b0a.css.map": "/deductive-sudoku-solver/static/css/main.073c9b0a.css.map",
+    "main.6ade1f40.js.map": "/deductive-sudoku-solver/static/js/main.6ade1f40.js.map",
+    "787.c77c1a08.chunk.js.map": "/deductive-sudoku-solver/static/js/787.c77c1a08.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.073c9b0a.css",
+    "static/js/main.6ade1f40.js"
+  ]
+}
