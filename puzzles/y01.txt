@@ -1,0 +1,13 @@
+1********
+*********
+*********
+*********
+*********
+*********
+*********
+*********
+*********
+
+A plain puzzle, which has too many possible solutions.
+
+It could be used to check the efficiency of the solver.
