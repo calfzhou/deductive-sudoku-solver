@@ -1,5 +1,6 @@
 import copy
 import io
+import re
 import typing
 
 from .board import Area, AreaType, Board, Cell
@@ -37,15 +38,29 @@ class BoardData:
                     yield line
 
         def iter_values(line):
-            for mark in line:
-                if mark != ' ':
-                    yield board.lookup(mark)
+            for piece in re.split(r'(\[[^\]]*\])', line):
+                if piece == '':
+                    continue
+                elif piece[0] == '[':
+                    yield piece
+                else:
+                    for mark in piece:
+                        if mark != ' ':
+                            yield board.lookup(mark)
 
         puzzle = cls(board)
         for row, line in zip(board.iter_areas(AreaType.ROW), iter_puzzle_lines(puzzle_file)):
             for cell, value in zip(row.iter_cells(), iter_values(line)):
-                if value is not None:
+                if value is None:
+                    continue
+                elif isinstance(value, int):
                     puzzle.acknowledge_cell(cell, value)
+                elif value[0] == '[':
+                    candidates = filter(lambda v: v is not None, iter_values(value.strip('[^]')))
+                    if value[1] == '^':
+                        puzzle.get_candidates(cell).remove(candidates)
+                    else:
+                        puzzle.get_candidates(cell).retain(candidates)
 
         return puzzle
 
