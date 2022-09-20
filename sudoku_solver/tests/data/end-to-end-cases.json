@@ -44,7 +44,7 @@
     "solved": false
   },
   "c01_min_naked": {
-    "cmd_line": "puzzles/c01.txt --guess=false --deduce=false --linked-deduce=2 --naked-deduce=3",
+    "cmd_line": "puzzles/c01.txt --guess=false --deduce=false --linked-deduce=2 --naked-deduce=2",
     "solved": true
   },
   "c01_min_hidden": {

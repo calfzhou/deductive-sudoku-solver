@@ -345,7 +345,7 @@ class SudokuSolver:
     def _linked_deduce(self, level: int, area_type: AreaType, status: SolvingStatus):
         puzzle = status.puzzle
         def is_useful(area: Area) -> bool:
-            if puzzle.get_linked_confirm_level(area, number) <= level:
+            if puzzle.get_linked_confirm_level(area, number) < level:
                 return False
             if len(puzzle.get_positions(area, number)) > level:
                 return False

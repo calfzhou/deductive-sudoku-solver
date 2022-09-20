@@ -10,9 +10,9 @@
 
 Cannot be solved using only naked and hidden deduce.
 
-Need linked L2, plus naked L3 or hidden L1.
+Need linked L2, plus naked L2 or hidden L1.
 
---guess=false --deduce=false --linked-deduce=2 --naked-deduce=3
+--guess=false --deduce=false --linked-deduce=2 --naked-deduce=2
 --guess=false --deduce=false --linked-deduce=2 --hidden-deduce=1
 
 4 6 5  2 1 7  3 8 9
