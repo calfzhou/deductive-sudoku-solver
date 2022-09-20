@@ -157,21 +157,26 @@ class Solver {
   protected *linkedDeduce(level: number, puzzle: Puzzle): Generator<SolvingStep> {
     const board = puzzle.board
     const rule = DeduceRule.Linked
-    const areaKinds = [[AreaKind.Row, AreaKind.Column], [AreaKind.Column, AreaKind.Row]]
+    const areaKinds = [AreaKind.Row, AreaKind.Column]
 
     // Traverse all `level`-length area combinations for every candidate value.
     for (const value of _.range(board.size)) {
-      for (const [areaKind, orthAreaKind] of areaKinds) {
+      for (const kind of areaKinds) {
+        const orthKind = board.orthogonalKindOf(kind)
+        if (orthKind === undefined) {
+          continue
+        }
+
         for (const indices of combinations(_.range(board.size), level)) {
           // Get all orthogonal area indices where the value occurs.
           const orthIndices = new ValueSet()
           indices.forEach(index => orthIndices.merge(_.range(board.size).filter(
-            orthIndex => puzzle.candidates(board.intersectCellOf(areaKind, index, orthIndex)).contains(value)
+            orthIndex => puzzle.candidates(board.intersectCellOf(kind, index, orthIndex)).contains(value)
           )))
 
           // Compare number of orthogonal areas to number of areas (level).
           if (orthIndices.size < level) {
-            console.log('paradox', rule, level, value, areaKind, indices)
+            console.log('paradox', rule, level, value, kind, indices)
             throw new ParadoxError(rule)
           } else if (orthIndices.size > level) {
             continue
@@ -180,8 +185,8 @@ class Solver {
           // Remove value from non-intersect cells of orthogonal areas.
           const mutations = _.concat(...orthIndices.asArray().map(orthIndex => {
             const cells = board.iterCells(
-              { kind: orthAreaKind, index: orthIndex },
-              indices.map(index => board.intersectCellOf(areaKind, index, orthIndex))
+              { kind: orthKind, index: orthIndex },
+              indices.map(index => board.intersectCellOf(kind, index, orthIndex))
             )
             return puzzle.removeCandidates(value, cells)
           }))

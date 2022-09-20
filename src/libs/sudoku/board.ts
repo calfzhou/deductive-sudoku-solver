@@ -44,6 +44,15 @@ export default class Board {
     }
   }
 
+  orthogonalKindOf(kind: AreaKind): AreaKind | undefined {
+    switch (kind) {
+      case AreaKind.Row:
+        return AreaKind.Column
+      case AreaKind.Column:
+        return AreaKind.Row
+    }
+  }
+
   intersectCellOf(kind: AreaKind, index: number, orthIndex: number): Cell {
     switch (kind) {
       case AreaKind.Row:
