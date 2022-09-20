@@ -128,7 +128,8 @@ def main():
         if status.interrupted:
             print('There might be more solutions not found.')
     else:
-        print('Not solved.')
+        print('Not solved, the final state is:')
+        puzzle.print(args.better_print)
 
     # print(f'useless naked deduce: {status.useless_naked_deduce}')
     # print(f'useless hidden deduce: {status.useless_hidden_deduce}')
