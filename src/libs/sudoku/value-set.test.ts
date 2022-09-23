@@ -20,6 +20,17 @@ describe('create value set', () => {
   })
 })
 
+describe('a value set', () => {
+  it('is iterable', () => {
+    const valueSet = new ValueSet([1, 3, 5])
+    const result = new Array<number>()
+    for (const value of valueSet) {
+      result.push(value)
+    }
+    expect(result).toEqual([1, 3, 5])
+  })
+})
+
 describe('modify value set', () => {
   test('merges a number', () => {
     const valueSet = new ValueSet([1, 3, 5])

@@ -1,48 +1,32 @@
 import _ from 'lodash'
 
-import { AreaKind } from './board'
+import { AreaKind, Cell } from './board'
+import {
+  DeduceRule,
+  SolvingStep,
+  StopSearchingError,
+  GuessEvidence,
+  ParadoxError,
+  NakedEvidence,
+  HiddenEvidence,
+  LinkedEvidence,
+} from './deduce-info'
 import { combinations, filter } from '../../utils/itertools'
 import Puzzle from './puzzle'
 import ValueSet from './value-set'
-import Formatter from './formatter'
-import { format } from 'node:path/win32'
 
-export const enum DeduceRule {
-  Naked = 'naked',
-  Hidden = 'hidden',
-  Linked = 'linked',
-}
-
-interface SolvingStep {
-  readonly rule: DeduceRule
-  readonly level: number
-}
-
-export class ParadoxError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'ParadoxError'
-  }
-}
-
-class SolvingStatus {}
-
-class Solver {
-  readonly maxLevels = {
-    [DeduceRule.Naked]: -1,
-    [DeduceRule.Hidden]: -1,
-    [DeduceRule.Linked]: -1,
-  }
+export default class Solver {
+  readonly maxLevels = new Map<DeduceRule, number>()
   lowerLevelFirst = true
 
   disableAllRules() {
-    this.maxLevels[DeduceRule.Naked] = 0
-    this.maxLevels[DeduceRule.Hidden] = 0
-    this.maxLevels[DeduceRule.Linked] = 0
+    this.maxLevels.set(DeduceRule.Naked, 0)
+    this.maxLevels.set(DeduceRule.Hidden, 0)
+    this.maxLevels.set(DeduceRule.Linked, 0)
   }
 
   ruleEnabled(rule: DeduceRule, level: number): boolean {
-    const maxLevel = this.maxLevels[rule]
+    const maxLevel = this.maxLevels.get(rule) ?? -1
     return maxLevel < 0 || level <= maxLevel
   }
 
@@ -53,10 +37,80 @@ class Solver {
         improved = true
         yield step
       }
+
       if (!improved) {
         break
       }
     }
+  }
+
+  *search(puzzle: Puzzle, solutions?: Puzzle[], maxCount = 1): Generator<SolvingStep> {
+    solutions = solutions ?? new Array<Puzzle>()
+    try {
+      yield* this.guessSearch(1, puzzle, solutions, maxCount)
+    } catch (err: unknown) {
+      if (err instanceof StopSearchingError) {
+        return
+      } else {
+        throw err
+      }
+    }
+  }
+
+  protected *guessSearch(
+    level: number,
+    puzzle: Puzzle,
+    solutions: Puzzle[],
+    maxCount: number
+  ): Generator<SolvingStep> {
+    const cell = this.chooseGuessingCell(puzzle)
+    if (cell === undefined) {
+      return
+    }
+
+    const candidates = puzzle.candidates(cell)
+    for (const value of candidates) {
+      const clonedPuzzle = puzzle.clone()
+      const removed = clonedPuzzle.candidates(cell).retain(value)
+      const mutations = [{ cell, removed }]
+      const evidence = new GuessEvidence(level, cell, candidates.asArray(), value)
+      yield { evidence, mutations, puzzle: clonedPuzzle }
+
+      try {
+        yield* this.deduce(clonedPuzzle)
+      } catch (err: unknown) {
+        if (err instanceof ParadoxError) {
+          yield { evidence: err.evidence, mutations: [], puzzle: clonedPuzzle }
+          continue
+        } else {
+          throw err
+        }
+      }
+
+      if (clonedPuzzle.fulfilled()) {
+        solutions.push(clonedPuzzle)
+        if (solutions.length >= maxCount) {
+          throw new StopSearchingError()
+        }
+      } else {
+        yield* this.guessSearch(level + 1, clonedPuzzle, solutions, maxCount)
+      }
+    }
+  }
+
+  protected chooseGuessingCell(puzzle: Puzzle): Cell | undefined {
+    let selectedCell = undefined
+    let minSize = puzzle.size + 1
+    for (const cell of puzzle.board.iterCells()) {
+      const size = puzzle.candidates(cell).size
+      if (size === 2) {
+        return cell
+      } else if (2 < size && size < minSize) {
+        selectedCell = cell
+        minSize = size
+      }
+    }
+    return selectedCell
   }
 
   protected *deduceOneRound(puzzle: Puzzle): Generator<SolvingStep> {
@@ -92,7 +146,6 @@ class Solver {
 
   protected *nakedDeduce(level: number, puzzle: Puzzle): Generator<SolvingStep> {
     const board = puzzle.board
-    const rule = DeduceRule.Naked
 
     // Traverse all `level`-length cell combinations of every area.
     for (const area of board.iterAreas()) {
@@ -104,9 +157,8 @@ class Solver {
 
         // Compare number of cells to number of candidates (level).
         if (candidates.size < level) {
-          // TODO: Paradox.
-          console.log('paradox', rule, level, area, cells)
-          throw new ParadoxError(rule)
+          const evidence = new NakedEvidence(level, area, cells, candidates.asArray())
+          throw new ParadoxError(evidence)
         } else if (candidates.size > level) {
           continue
         }
@@ -114,8 +166,8 @@ class Solver {
         // Remove candidates from other cells of the current area.
         const mutations = puzzle.removeCandidates(candidates, board.iterCells(area, cells))
         if (mutations.length > 0) {
-          // console.log(rule, level, area, cells, mutations)
-          yield { rule, level }
+          const evidence = new NakedEvidence(level, area, cells, candidates.asArray())
+          yield { evidence, mutations, puzzle }
         }
       }
     }
@@ -123,18 +175,18 @@ class Solver {
 
   protected *hiddenDeduce(level: number, puzzle: Puzzle): Generator<SolvingStep> {
     const board = puzzle.board
-    const rule = DeduceRule.Hidden
 
     // Traverse all `level`-length value combinations of every area.
     for (const area of board.iterAreas()) {
       for (const values of combinations(_.range(board.size), level)) {
         // Get all cells containing any of the selected value.
-        const cells = Array.from(filter(board.iterCells(area), cell => puzzle.candidates(cell).containsAny(values)))
+        const cells = Array.from(
+          filter(board.iterCells(area), cell => puzzle.candidates(cell).containsAny(values)))
 
         // Compare number of values to number of cells (level).
         if (cells.length < level) {
-          console.log('paradox', rule, level, area, cells)
-          throw new ParadoxError(rule)
+          const evidence = new HiddenEvidence(level, area, values, cells)
+          throw new ParadoxError(evidence)
         }
 
         // For other areas which contain all these cells, remove candidates from other cells.
@@ -147,8 +199,8 @@ class Solver {
         }
 
         if (mutations.length > 0) {
-          // console.log(rule, level, area, cells, mutations)
-          yield { rule, level }
+          const evidence = new HiddenEvidence(level, area, values, cells)
+          yield { evidence, mutations, puzzle }
         }
       }
     }
@@ -156,7 +208,6 @@ class Solver {
 
   protected *linkedDeduce(level: number, puzzle: Puzzle): Generator<SolvingStep> {
     const board = puzzle.board
-    const rule = DeduceRule.Linked
     const areaKinds = [AreaKind.Row, AreaKind.Column]
 
     // Traverse all `level`-length area combinations for every candidate value.
@@ -176,8 +227,8 @@ class Solver {
 
           // Compare number of orthogonal areas to number of areas (level).
           if (orthIndices.size < level) {
-            console.log('paradox', rule, level, value, kind, indices)
-            throw new ParadoxError(rule)
+            const evidence = new LinkedEvidence(level, value, kind, orthKind, indices, orthIndices.asArray())
+            throw new ParadoxError(evidence)
           } else if (orthIndices.size > level) {
             continue
           }
@@ -191,13 +242,11 @@ class Solver {
             return puzzle.removeCandidates(value, cells)
           }))
           if (mutations.length > 0) {
-            // console.log(rule, level, value, areaKind, indices, orthIndices.asArray(), mutations)
-            yield { rule, level }
+            const evidence = new LinkedEvidence(level, value, kind, orthKind, indices, orthIndices.asArray())
+            yield { evidence, mutations, puzzle }
           }
         }
       }
     }
   }
 }
-
-export default Solver

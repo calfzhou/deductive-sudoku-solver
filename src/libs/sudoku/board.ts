@@ -5,12 +5,12 @@ export const enum AreaKind {
   Block = 'block',
 }
 
-export interface Cell {
+export type Cell = {
   readonly row: number
   readonly col: number
 }
 
-export interface Area {
+export type Area = {
   readonly kind: AreaKind
   readonly index: number
 }
@@ -64,7 +64,7 @@ export default class Board {
     }
   }
 
-  *iterCells(area?: Area, excludes?: Cell[]): Generator<Cell> {
+  *iterCells(area?: Area, excludes?: readonly Cell[]): Generator<Cell> {
     let minRow = 0, minCol = 0, maxRow = this.size - 1, maxCol = this.size - 1
     switch (area?.kind) {
       case AreaKind.Row:
@@ -109,7 +109,7 @@ export default class Board {
   //   }
   // }
 
-  commonAreasOf(cells: Cell[], exclude?: AreaKind): Area[] {
+  commonAreasOf(cells: readonly Cell[], exclude?: AreaKind): Area[] {
     const areas = new Array<Area>()
 
     const { row, col } = cells[0]

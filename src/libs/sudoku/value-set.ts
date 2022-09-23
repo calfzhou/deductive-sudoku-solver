@@ -1,13 +1,13 @@
 import _ from 'lodash'
 
-export type ValuesParam = number | number[] | ValueSet
+export type ValuesParam = number | readonly number[] | ValueSet
 
-class ValueSet {
+export default class ValueSet {
   protected values: number[]
 
   constructor(values?: ValuesParam, capacity?: number) {
     if (values !== undefined) {
-      this.values = ValueSet.normalizeValues(values)
+      this.values = Array.from(ValueSet.normalizeValues(values))
     } else if (capacity !== undefined) {
       this.values = _.range(capacity)
     } else {
@@ -23,17 +23,21 @@ class ValueSet {
     return this.values[0]
   }
 
+  [Symbol.iterator]() {
+    return this.values.values()
+  }
+
   asArray(): number[] {
     return this.values
   }
 
-  static normalizeValues(values: ValuesParam): number[] {
+  static normalizeValues(values: ValuesParam): readonly number[] {
     if (typeof values === 'number') {
       return [values]
-    } else if (Array.isArray(values)) {
-      return values
-    } else /* if (values instanceof ValueSet) */ {
+    } else if (values instanceof ValueSet) {
       return values.values
+    } else /* ReadonlyArray<number> */ {
+      return values
     }
   }
 
@@ -95,5 +99,3 @@ class ValueSet {
     return removed
   }
 }
-
-export default ValueSet

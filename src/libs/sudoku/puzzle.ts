@@ -3,12 +3,12 @@ import _ from 'lodash'
 import Board, { Cell } from './board'
 import ValueSet, { ValuesParam } from './value-set'
 
-export interface Variation {
+export type Variation = {
   readonly cell: Cell
   readonly removed: number[]
 }
 
-class Puzzle {
+export default class Puzzle {
   // `data` holds all cells' candidate numbers.
   data: readonly ValueSet[]
 
@@ -22,6 +22,10 @@ class Puzzle {
 
   get size(): number {
     return this.board.size
+  }
+
+  clone() {
+    return new Puzzle(this.board, _.cloneDeep(this.data))
   }
 
   candidates(cell: Cell): ValueSet {
@@ -107,5 +111,3 @@ class Puzzle {
     return variations
   }
 }
-
-export default Puzzle
