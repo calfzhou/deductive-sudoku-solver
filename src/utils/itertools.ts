@@ -58,7 +58,6 @@ export function count<TElem>(iterable: Iterable<TElem>) {
   return n
 }
 
-
 export type PredicateFunc<TElem> = (elem: TElem, index: number) => boolean
 
 export function* filter<TElem>(iterable: Iterable<TElem>, predicate: PredicateFunc<TElem> = Boolean): Generator<TElem> {

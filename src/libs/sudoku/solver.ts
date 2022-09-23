@@ -57,12 +57,7 @@ export default class Solver {
     }
   }
 
-  protected *guessSearch(
-    level: number,
-    puzzle: Puzzle,
-    solutions: Puzzle[],
-    maxCount: number
-  ): Generator<SolvingStep> {
+  protected *guessSearch(level: number, puzzle: Puzzle, solutions: Puzzle[], maxCount: number): Generator<SolvingStep> {
     const cell = this.chooseGuessingCell(puzzle)
     if (cell === undefined) {
       return
@@ -180,8 +175,7 @@ export default class Solver {
     for (const area of board.iterAreas()) {
       for (const values of combinations(_.range(board.size), level)) {
         // Get all cells containing any of the selected value.
-        const cells = Array.from(
-          filter(board.iterCells(area), cell => puzzle.candidates(cell).containsAny(values)))
+        const cells = Array.from(filter(board.iterCells(area), cell => puzzle.candidates(cell).containsAny(values)))
 
         // Compare number of values to number of cells (level).
         if (cells.length < level) {
@@ -190,8 +184,9 @@ export default class Solver {
         }
 
         // For other areas which contain all these cells, remove candidates from other cells.
-        const mutations = _.concat(...board.commonAreasOf(cells, area.kind).map(
-          area => puzzle.removeCandidates(values, board.iterCells(area, cells))))
+        const otherAreas = board.commonAreasOf(cells, area.kind)
+        const areaMutations = otherAreas.map(area => puzzle.removeCandidates(values, board.iterCells(area, cells)))
+        const mutations = _.flatten(areaMutations)
 
         // Remove other candidates from these cells.
         if (cells.length === level) {
@@ -221,9 +216,13 @@ export default class Solver {
         for (const indices of combinations(_.range(board.size), level)) {
           // Get all orthogonal area indices where the value occurs.
           const orthIndices = new ValueSet()
-          indices.forEach(index => orthIndices.merge(_.range(board.size).filter(
-            orthIndex => puzzle.candidates(board.intersectCellOf(kind, index, orthIndex)).contains(value)
-          )))
+          indices.forEach(index =>
+            orthIndices.merge(
+              _.range(board.size).filter(orthIndex =>
+                puzzle.candidates(board.intersectCellOf(kind, index, orthIndex)).contains(value)
+              )
+            )
+          )
 
           // Compare number of orthogonal areas to number of areas (level).
           if (orthIndices.size < level) {
@@ -234,13 +233,14 @@ export default class Solver {
           }
 
           // Remove value from non-intersect cells of orthogonal areas.
-          const mutations = _.concat(...orthIndices.asArray().map(orthIndex => {
+          const areaMutations = orthIndices.asArray().map(orthIndex => {
             const cells = board.iterCells(
               { kind: orthKind, index: orthIndex },
               indices.map(index => board.intersectCellOf(kind, index, orthIndex))
             )
             return puzzle.removeCandidates(value, cells)
-          }))
+          })
+          const mutations = _.flatten(areaMutations)
           if (mutations.length > 0) {
             const evidence = new LinkedEvidence(level, value, kind, orthKind, indices, orthIndices.asArray())
             yield { evidence, mutations, puzzle }

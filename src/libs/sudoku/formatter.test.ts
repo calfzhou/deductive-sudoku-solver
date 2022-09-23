@@ -12,8 +12,6 @@ describe('formatter splits line to columns', () => {
     const formatter = new Formatter()
     // @ts-ignore
     const cols = formatter.splitMarkers('5***[8 9][]**[^3]7')
-    expect(Array.from(cols)).toEqual([
-      '5', '*', '*', '*', '[8 9]', '[]', '*', '*', '[^3]', '7'
-    ])
+    expect(Array.from(cols)).toEqual(['5', '*', '*', '*', '[8 9]', '[]', '*', '*', '[^3]', '7'])
   })
 })

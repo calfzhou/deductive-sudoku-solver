@@ -36,7 +36,7 @@ export default class ValueSet {
       return [values]
     } else if (values instanceof ValueSet) {
       return values.values
-    } else /* ReadonlyArray<number> */ {
+    } /* ReadonlyArray<number> */ else {
       return values
     }
   }

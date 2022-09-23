@@ -1,4 +1,3 @@
-
 export const enum AreaKind {
   Row = 'row',
   Column = 'column',
@@ -29,8 +28,7 @@ export default class Board {
   }
 
   blockIndexOf(cell: Cell): number {
-    return this.blockHeight * Math.floor(cell.row / this.blockHeight)
-      + Math.floor(cell.col / this.blockWidth)
+    return this.blockHeight * Math.floor(cell.row / this.blockHeight) + Math.floor(cell.col / this.blockWidth)
   }
 
   areaOf(cell: Cell, kind: AreaKind): Area {
@@ -65,7 +63,10 @@ export default class Board {
   }
 
   *iterCells(area?: Area, excludes?: readonly Cell[]): Generator<Cell> {
-    let minRow = 0, minCol = 0, maxRow = this.size - 1, maxCol = this.size - 1
+    let minRow = 0,
+      minCol = 0,
+      maxRow = this.size - 1,
+      maxCol = this.size - 1
     switch (area?.kind) {
       case AreaKind.Row:
         minRow = maxRow = area.index
@@ -94,7 +95,7 @@ export default class Board {
   }
 
   *iterAreas(kind?: AreaKind): Generator<Area> {
-    const kinds = (kind === undefined) ? [AreaKind.Row, AreaKind.Column, AreaKind.Block] : [kind]
+    const kinds = kind === undefined ? [AreaKind.Row, AreaKind.Column, AreaKind.Block] : [kind]
     for (kind of kinds) {
       for (let index = 0; index < this.size; ++index) {
         yield { kind, index }

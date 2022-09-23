@@ -37,7 +37,7 @@ export default class Puzzle {
    * Checks if the puzzle is fulfilled, i.e. all cells have one and only one candidate.
    * @returns true if fulfilled.
    */
-  fulfilled() : boolean {
+  fulfilled(): boolean {
     return this.data.every(candidates => candidates.size === 1)
   }
 

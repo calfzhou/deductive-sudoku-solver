@@ -5,15 +5,20 @@ import { combinations, PruningReducer } from './itertools'
 describe('combinations', () => {
   test('(ABCD, 2)', () => {
     expect(Array.from(combinations('ABCD', 2))).toEqual([
-      ['A', 'B'], ['A', 'C'], ['A', 'D'],
-      ['B', 'C'], ['B', 'D'],
+      ['A', 'B'],
+      ['A', 'C'],
+      ['A', 'D'],
+      ['B', 'C'],
+      ['B', 'D'],
       ['C', 'D'],
     ])
   })
 
   test('(4, 3)', () => {
     expect(Array.from(combinations(_.range(4), 3))).toEqual([
-      [0, 1, 2], [0, 1, 3], [0, 2, 3],
+      [0, 1, 2],
+      [0, 1, 3],
+      [0, 2, 3],
       [1, 2, 3],
     ])
   })
@@ -24,7 +29,7 @@ describe('combinations', () => {
   })
 
   test('pruning odd numbers', () => {
-    const pruning: PruningReducer<number, unknown> = (currElem) => [currElem % 2 === 1]
+    const pruning: PruningReducer<number, unknown> = currElem => [currElem % 2 === 1]
     const odds = _.range(1, 10, 2)
 
     const result = Array.from(combinations(_.range(10), 3, pruning))

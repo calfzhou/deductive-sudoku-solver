@@ -41,13 +41,16 @@ export default class Formatter {
       if (values.length === capacity) {
         return '*'
       } else if (values.length >= capacity / 2 + 1) {
-        const text = new ValueSet(undefined, capacity).retain(values).map(v => this.markers[v]).join(sep)
+        const text = new ValueSet(undefined, capacity)
+          .retain(values)
+          .map(v => this.markers[v])
+          .join(sep)
         return `[^${text}]`
       }
     }
 
     const text = values.map(v => this.markers[v]).join(sep)
-    return (values.length > 1) ? `[${text}]` : text
+    return values.length > 1 ? `[${text}]` : text
   }
 
   formatPuzzle(puzzle: Puzzle, border = false): string {
