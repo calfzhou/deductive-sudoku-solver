@@ -10,8 +10,11 @@ import Formatter from './formatter'
 import Puzzle from './puzzle'
 import Solver from './solver'
 
-function loadPuzzleFile(filePath: string): string[] {
-  const content = fs.readFileSync(filePath, 'utf8')
+function loadPuzzleFile(filePath?: string): string[] {
+  if (filePath === undefined) {
+    console.log('Enter puzzle line by line (press Ctrl+D to finish):')
+  }
+  const content = fs.readFileSync(filePath ?? 1, 'utf8')
   return content.split(/\r?\n/)
 }
 
@@ -25,7 +28,7 @@ enum StepMsgLevel {
 type StepMsgLevelStrings = keyof typeof StepMsgLevel
 
 program
-  .argument('<puzzle-file>', 'a file contains sudoku puzzle, read from stdin if not provided')
+  .argument('[puzzle-file]', 'a file contains sudoku puzzle (default to stdin)')
   .addOption(
     new Option('--block-height <number>', 'how many rows a block contains')
       .default(3)
@@ -96,6 +99,7 @@ program
     const board = new Board(options.blockHeight, options.blockWidth)
     const formatter = new Formatter(options.markers)
     const puzzle = formatter.parsePuzzle(loadPuzzleFile(puzzlePath), board)
+    console.log('The initial puzzle is:')
     console.log(formatter.formatPuzzle(puzzle))
 
     const stepMsgLevel = StepMsgLevel[_.upperFirst(_.camelCase(options.showSteps)) as StepMsgLevelStrings]
