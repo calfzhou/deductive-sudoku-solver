@@ -10,6 +10,12 @@ In the project directory, you can run:
 
 Runs the command-line sudoku solver.
 
+E.g. to see minimal required rule levels, run:
+
+``` bash
+npm run solve-puzzle -- <PUZZLE-FILE> --show-steps evidence | grep -Eo '\[\w+@[0-9]+\]' | sort | uniq
+```
+
 ### `npm start`
 
 Runs the app in the development mode.\

@@ -5,7 +5,7 @@
 * A: primary check only
 * B: naked & hidden deduce only
 * C: need linked deduce
-* D: need key-number deduce - not implemented
+* D: need key-number (coloring) deduce - not implemented
 * X: must guess, but single solution
 * Y: multiple solutions
 * Z: no solution

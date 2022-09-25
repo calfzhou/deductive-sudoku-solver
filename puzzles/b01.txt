@@ -12,8 +12,9 @@
 
 Need naked L3 or hidden L1.
 
---guess=false --deduce=false --naked-deduce=3
---guess=false --deduce=false --hidden-deduce=1
+{ naked: 3 }
+{ hidden: 1, naked: 1 }
+{ hidden: 5 }
 
 8 9 5  1 7 6  2 4 3
 6 7 4  9 2 3  5 8 1

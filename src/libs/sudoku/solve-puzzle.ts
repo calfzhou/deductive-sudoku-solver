@@ -5,7 +5,7 @@ import _ from 'lodash'
 import pluralize from 'pluralize'
 
 import Board from './board'
-import { DeduceRule, GuessEvidence } from './deduce-info'
+import { DeduceRule, GuessEvidence, ParadoxError } from './deduce-info'
 import Formatter from './formatter'
 import Puzzle from './puzzle'
 import Solver from './solver'
@@ -103,12 +103,23 @@ program
     console.log(formatter.formatPuzzle(puzzle))
 
     const stepMsgLevel = StepMsgLevel[_.upperFirst(_.camelCase(options.showSteps)) as StepMsgLevelStrings]
-    for (const step of solver.deduce(puzzle)) {
-      if (stepMsgLevel >= StepMsgLevel.Evidence) {
-        console.log(formatter.formatSolvingStep(step, stepMsgLevel >= StepMsgLevel.Mutations))
-        if (stepMsgLevel >= StepMsgLevel.Puzzle) {
-          console.log(formatter.formatPuzzle(step.puzzle, options.betterPrint))
+    try {
+      for (const step of solver.deduce(puzzle)) {
+        if (stepMsgLevel >= StepMsgLevel.Evidence) {
+          console.log(formatter.formatSolvingStep(step, stepMsgLevel >= StepMsgLevel.Mutations))
+          if (stepMsgLevel >= StepMsgLevel.Puzzle) {
+            console.log(formatter.formatPuzzle(step.puzzle, options.betterPrint))
+          }
         }
+      }
+    } catch (err: unknown) {
+      if (err instanceof ParadoxError) {
+        console.log('Paradox occurs:')
+        console.log(formatter.formatSolvingStep({ evidence: err.evidence, mutations: [], puzzle}))
+        console.log(formatter.formatPuzzle(puzzle, options.betterPrint))
+        return
+      } else {
+        throw err
       }
     }
 

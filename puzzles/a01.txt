@@ -12,7 +12,8 @@
 
 A very simple puzzle. Can be solved using primary check only.
 
---guess=false --deduce=false
+{ naked: 1 }
+{ hidden: 4 }
 
 4 2 8  3 7 9  1 6 5
 9 5 3  8 6 1  7 2 4

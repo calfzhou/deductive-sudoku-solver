@@ -14,8 +14,9 @@ Cannot be solved using only naked and hidden deduce.
 
 Need linked L3, plus naked and/or hidden deduce.
 
---guess=false --deduce=false --linked-deduce=3 --naked-deduce=5 --hidden-deduce=1
---guess=false --deduce=false --linked-deduce=3 --hidden-deduce=4
+{ linked: 3, naked: 5, hidden: 1 }
+{ linked: 3, hidden: 4, naked: 1 }
+{ linked: 3, hidden: 6 }
 
 4 8 2  5 3 7  9 6 1
 5 6 1  9 8 2  4 3 7

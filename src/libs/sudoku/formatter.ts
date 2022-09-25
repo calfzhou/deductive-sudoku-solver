@@ -35,6 +35,10 @@ export default class Formatter {
 
   formatValues(values: ValuesParam, capacity?: number): string {
     values = ValueSet.normalizeValues(values)
+    if (values.length === 0) {
+      return '[]'
+    }
+
     const sep = this.multiChar ? ' ' : ''
 
     if (capacity !== undefined) {

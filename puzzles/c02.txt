@@ -14,8 +14,9 @@ Cannot be solved using only naked and hidden deduce.
 
 Need linked L2, plus naked and/or hidden deduce.
 
---guess=false --deduce=false --linked-deduce=2 --naked-deduce=2
---guess=false --deduce=false --linked-deduce=2 --hidden-deduce=1
+{ linked: 2, naked: 2 }
+{ linked: 2, hidden: 1, naked: 1 }
+{ linked: 2, hidden: 6 }
 
 4 6 2  1 8 3  7 5 9
 9 1 5  2 7 4  8 3 6
