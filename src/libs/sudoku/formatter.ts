@@ -172,7 +172,7 @@ export default class Formatter {
     paradoxical && pieces.push('[paradox] ')
     pieces.push(`[${evidence.rule}@${evidence.level}]`)
     if (evidence instanceof NakedEvidence) {
-      pieces.push(` [${evidence.area.kind} ${evidence.area.index + 1}] `)
+      pieces.push(' ')
       pieces.push(formatCells(evidence.cells, false))
       pieces.push(' have ')
       pieces.push(formatValues(evidence.values, 'candidate'))

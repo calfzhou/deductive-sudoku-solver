@@ -158,8 +158,10 @@ export default class Solver {
           continue
         }
 
-        // Remove candidates from other cells of the current area.
-        const mutations = puzzle.removeCandidates(candidates, board.iterCells(area, cells))
+        // For all areas containing all these cells, remove candidates from other cells.
+        const commonAreas = board.commonAreasOf(cells)
+        const areaMutations = commonAreas.map(a => puzzle.removeCandidates(candidates, board.iterCells(a, cells)))
+        const mutations = _.flatten(areaMutations)
         if (mutations.length > 0) {
           const evidence = new NakedEvidence(level, area, cells, candidates.asArray())
           yield { evidence, mutations, puzzle }
@@ -183,9 +185,9 @@ export default class Solver {
           throw new ParadoxError(evidence)
         }
 
-        // For other areas which contain all these cells, remove candidates from other cells.
+        // For other areas containing all these cells, remove candidates from other cells.
         const otherAreas = board.commonAreasOf(cells, area.kind)
-        const areaMutations = otherAreas.map(area => puzzle.removeCandidates(values, board.iterCells(area, cells)))
+        const areaMutations = otherAreas.map(a => puzzle.removeCandidates(values, board.iterCells(a, cells)))
         const mutations = _.flatten(areaMutations)
 
         // Remove other candidates from these cells.
