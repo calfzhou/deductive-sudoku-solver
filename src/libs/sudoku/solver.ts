@@ -1,6 +1,6 @@
 import _ from 'lodash'
 
-import { AreaKind, Cell } from './board'
+import { HouseKind, Cell } from './grid'
 import {
   DeduceRule,
   SolvingStep,
@@ -96,7 +96,7 @@ export default class Solver {
   protected chooseGuessingCell(puzzle: Puzzle): Cell | undefined {
     let selectedCell = undefined
     let minSize = puzzle.size + 1
-    for (const cell of puzzle.board.iterCells()) {
+    for (const cell of puzzle.grid.iterCells()) {
       const size = puzzle.candidates(cell).size
       if (size === 2) {
         return cell
@@ -140,30 +140,30 @@ export default class Solver {
   }
 
   protected *nakedDeduce(level: number, puzzle: Puzzle): Generator<SolvingStep> {
-    const board = puzzle.board
+    const grid = puzzle.grid
 
-    // Traverse all `level`-length cell combinations of every area.
-    for (const area of board.iterAreas()) {
+    // Traverse all `level`-length cell combinations of every house.
+    for (const house of grid.iterHouses()) {
       // TODO: Apply pruning.
-      for (const cells of combinations(board.iterCells(area), level)) {
+      for (const cells of combinations(grid.iterCells(house), level)) {
         // Get candidates union of the selected cells.
         const candidates = new ValueSet()
         cells.forEach(cell => candidates.merge(puzzle.candidates(cell)))
 
         // Compare number of cells to number of candidates (level).
         if (candidates.size < level) {
-          const evidence = new NakedEvidence(level, area, cells, candidates.asArray())
+          const evidence = new NakedEvidence(level, house, cells, candidates.asArray())
           throw new ParadoxError(evidence)
         } else if (candidates.size > level) {
           continue
         }
 
-        // For all areas containing all these cells, remove candidates from other cells.
-        const commonAreas = board.commonAreasOf(cells)
-        const areaMutations = commonAreas.map(a => puzzle.removeCandidates(candidates, board.iterCells(a, cells)))
-        const mutations = _.flatten(areaMutations)
+        // For all houses containing all these cells, remove candidates from other cells.
+        const commonHouses = grid.commonHousesOf(cells)
+        const houseMutations = commonHouses.map(h => puzzle.removeCandidates(candidates, grid.iterCells(h, cells)))
+        const mutations = _.flatten(houseMutations)
         if (mutations.length > 0) {
-          const evidence = new NakedEvidence(level, area, cells, candidates.asArray())
+          const evidence = new NakedEvidence(level, house, cells, candidates.asArray())
           yield { evidence, mutations, puzzle }
         }
       }
@@ -171,24 +171,24 @@ export default class Solver {
   }
 
   protected *hiddenDeduce(level: number, puzzle: Puzzle): Generator<SolvingStep> {
-    const board = puzzle.board
+    const grid = puzzle.grid
 
-    // Traverse all `level`-length value combinations of every area.
-    for (const area of board.iterAreas()) {
-      for (const values of combinations(_.range(board.size), level)) {
+    // Traverse all `level`-length value combinations of every house.
+    for (const house of grid.iterHouses()) {
+      for (const values of combinations(_.range(grid.size), level)) {
         // Get all cells containing any of the selected value.
-        const cells = Array.from(filter(board.iterCells(area), cell => puzzle.candidates(cell).containsAny(values)))
+        const cells = Array.from(filter(grid.iterCells(house), cell => puzzle.candidates(cell).containsAny(values)))
 
         // Compare number of values to number of cells (level).
         if (cells.length < level) {
-          const evidence = new HiddenEvidence(level, area, values, cells)
+          const evidence = new HiddenEvidence(level, house, values, cells)
           throw new ParadoxError(evidence)
         }
 
-        // For other areas containing all these cells, remove candidates from other cells.
-        const otherAreas = board.commonAreasOf(cells, area.kind)
-        const areaMutations = otherAreas.map(a => puzzle.removeCandidates(values, board.iterCells(a, cells)))
-        const mutations = _.flatten(areaMutations)
+        // For other houses containing all these cells, remove candidates from other cells.
+        const otherHouses = grid.commonHousesOf(cells, house.kind)
+        const houseMutations = otherHouses.map(h => puzzle.removeCandidates(values, grid.iterCells(h, cells)))
+        const mutations = _.flatten(houseMutations)
 
         // Remove other candidates from these cells.
         if (cells.length === level) {
@@ -196,7 +196,7 @@ export default class Solver {
         }
 
         if (mutations.length > 0) {
-          const evidence = new HiddenEvidence(level, area, values, cells)
+          const evidence = new HiddenEvidence(level, house, values, cells)
           yield { evidence, mutations, puzzle }
         }
       }
@@ -204,29 +204,29 @@ export default class Solver {
   }
 
   protected *linkedDeduce(level: number, puzzle: Puzzle): Generator<SolvingStep> {
-    const board = puzzle.board
-    const areaKinds = [AreaKind.Row, AreaKind.Column]
+    const grid = puzzle.grid
+    const houseKinds = [HouseKind.Row, HouseKind.Column]
 
-    // Traverse all `level`-length area combinations for every candidate value.
-    for (const value of _.range(board.size)) {
-      for (const kind of areaKinds) {
-        const orthKind = board.orthogonalKindOf(kind)
+    // Traverse all `level`-length house combinations for every candidate value.
+    for (const value of _.range(grid.size)) {
+      for (const kind of houseKinds) {
+        const orthKind = grid.orthogonalKindOf(kind)
         if (orthKind === undefined) {
           continue
         }
 
-        for (const indices of combinations(_.range(board.size), level)) {
-          // Get all orthogonal area indices where the value occurs.
+        for (const indices of combinations(_.range(grid.size), level)) {
+          // Get all orthogonal house indices where the value occurs.
           const orthIndices = new ValueSet()
           indices.forEach(index =>
             orthIndices.merge(
-              _.range(board.size).filter(orthIndex =>
-                puzzle.candidates(board.intersectCellOf(kind, index, orthIndex)).contains(value)
+              _.range(grid.size).filter(orthIndex =>
+                puzzle.candidates(grid.intersectCellOf(kind, index, orthIndex)).contains(value)
               )
             )
           )
 
-          // Compare number of orthogonal areas to number of areas (level).
+          // Compare number of orthogonal houses to number of houses (level).
           if (orthIndices.size < level) {
             const evidence = new LinkedEvidence(level, value, kind, orthKind, indices, orthIndices.asArray())
             throw new ParadoxError(evidence)
@@ -234,15 +234,15 @@ export default class Solver {
             continue
           }
 
-          // Remove value from non-intersect cells of orthogonal areas.
-          const areaMutations = orthIndices.asArray().map(orthIndex => {
-            const cells = board.iterCells(
+          // Remove value from non-intersect cells of orthogonal houses.
+          const houseMutations = orthIndices.asArray().map(orthIndex => {
+            const cells = grid.iterCells(
               { kind: orthKind, index: orthIndex },
-              indices.map(index => board.intersectCellOf(kind, index, orthIndex))
+              indices.map(index => grid.intersectCellOf(kind, index, orthIndex))
             )
             return puzzle.removeCandidates(value, cells)
           })
-          const mutations = _.flatten(areaMutations)
+          const mutations = _.flatten(houseMutations)
           if (mutations.length > 0) {
             const evidence = new LinkedEvidence(level, value, kind, orthKind, indices, orthIndices.asArray())
             yield { evidence, mutations, puzzle }

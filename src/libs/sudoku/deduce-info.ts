@@ -1,4 +1,4 @@
-import { Area, Cell, AreaKind } from './board'
+import { House, Cell, HouseKind } from './grid'
 import Puzzle, { Variation } from './puzzle'
 
 export const enum DeduceRule {
@@ -15,7 +15,7 @@ export abstract class DeduceEvidence {
 export class NakedEvidence extends DeduceEvidence {
   constructor(
     level: number,
-    public readonly area: Area,
+    public readonly house: House,
     public readonly cells: readonly Cell[],
     public readonly values: readonly number[]
   ) {
@@ -26,7 +26,7 @@ export class NakedEvidence extends DeduceEvidence {
 export class HiddenEvidence extends DeduceEvidence {
   constructor(
     level: number,
-    public readonly area: Area,
+    public readonly house: House,
     public readonly values: readonly number[],
     public readonly cells: readonly Cell[]
   ) {
@@ -38,8 +38,8 @@ export class LinkedEvidence extends DeduceEvidence {
   constructor(
     level: number,
     public readonly value: number,
-    public readonly kind: AreaKind,
-    public readonly orthKind: AreaKind,
+    public readonly kind: HouseKind,
+    public readonly orthKind: HouseKind,
     public readonly indices: readonly number[],
     public readonly orthIndices: readonly number[]
   ) {

@@ -1,6 +1,6 @@
 import _ from 'lodash'
 
-import Board, { Cell } from './board'
+import Grid, { Cell } from './grid'
 import ValueSet, { ValuesParam } from './value-set'
 
 export type Variation = {
@@ -12,24 +12,24 @@ export default class Puzzle {
   // `data` holds all cells' candidate numbers.
   data: readonly ValueSet[]
 
-  constructor(public readonly board: Board, data?: readonly ValueSet[]) {
+  constructor(public readonly grid: Grid, data?: readonly ValueSet[]) {
     if (data === undefined) {
-      this.data = _.times(board.cellCount, () => new ValueSet(undefined, board.size))
+      this.data = _.times(grid.cellCount, () => new ValueSet(undefined, grid.size))
     } else {
       this.data = data
     }
   }
 
   get size(): number {
-    return this.board.size
+    return this.grid.size
   }
 
   clone() {
-    return new Puzzle(this.board, _.cloneDeep(this.data))
+    return new Puzzle(this.grid, _.cloneDeep(this.data))
   }
 
   candidates(cell: Cell): ValueSet {
-    const index = this.board.indexOf(cell)
+    const index = this.grid.indexOf(cell)
     return this.data[index]
   }
 
@@ -43,13 +43,13 @@ export default class Puzzle {
 
   /**
    * Checks if the puzzle contains paradox, no matter it is fulfilled or not.
-   * Only checks primary paradox, i.e. two cells in one area have the same single candidate.
+   * Only checks primary paradox, i.e. two cells in one house have the same single candidate.
    * @returns true if contains paradox.
    */
   paradoxical(): boolean {
-    for (const area of this.board.iterAreas()) {
+    for (const house of this.grid.iterHouses()) {
       const knownValues = new Set<number>()
-      for (const cell of this.board.iterCells(area)) {
+      for (const cell of this.grid.iterCells(house)) {
         const candidates = this.candidates(cell)
         if (candidates.size === 0) {
           return true

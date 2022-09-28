@@ -1,7 +1,7 @@
 import _ from 'lodash'
 import pluralize from 'pluralize'
 
-import Board, { Cell } from './board'
+import Grid, { Cell } from './grid'
 import { GuessEvidence, HiddenEvidence, LinkedEvidence, NakedEvidence, SolvingStep } from './deduce-info'
 import ValueSet, { ValuesParam } from './value-set'
 import Puzzle from './puzzle'
@@ -62,13 +62,13 @@ export default class Formatter {
   }
 
   protected formatPuzzleSimple(puzzle: Puzzle): string {
-    const board = puzzle.board
-    const rowPieces = _.times(board.size, () => new Array<string>())
+    const grid = puzzle.grid
+    const rowPieces = _.times(grid.size, () => new Array<string>())
 
     let prevMaxWidth = 0
-    for (const col of _.range(board.size)) {
+    for (const col of _.range(grid.size)) {
       let maxWidth = 0
-      for (const row of _.range(board.size)) {
+      for (const row of _.range(grid.size)) {
         const pieces = rowPieces[row]
 
         const prevWidth = _.last(pieces)?.length ?? 0
@@ -76,12 +76,12 @@ export default class Formatter {
           pieces.push(' '.repeat(prevMaxWidth - prevWidth))
         }
 
-        if (col > 0 && col % board.blockWidth === 0) {
+        if (col > 0 && col % grid.boxWidth === 0) {
           pieces.push(' ')
         }
 
         const candidates = puzzle.candidates({ row, col })
-        const text = this.formatValues(candidates, board.size)
+        const text = this.formatValues(candidates, grid.size)
         pieces.push(text)
         maxWidth = Math.max(maxWidth, text.length)
       }
@@ -89,8 +89,8 @@ export default class Formatter {
     }
 
     const lines = new Array<string>()
-    for (const row of _.range(board.size)) {
-      if (row > 0 && row % board.blockHeight === 0) {
+    for (const row of _.range(grid.size)) {
+      if (row > 0 && row % grid.boxHeight === 0) {
         lines.push('')
       }
       lines.push(rowPieces[row].join(''))
@@ -100,18 +100,18 @@ export default class Formatter {
   }
 
   protected formatPuzzleWithBorder(puzzle: Puzzle): string {
-    const board = puzzle.board
+    const grid = puzzle.grid
     const lines = new Array<string>()
 
-    for (const row of _.range(board.size)) {
-      lines.push(this.formatBorderLine(board, row % board.blockHeight === 0))
-      for (const subRow of _.range(board.blockHeight)) {
+    for (const row of _.range(grid.size)) {
+      lines.push(this.formatBorderLine(grid, row % grid.boxHeight === 0))
+      for (const subRow of _.range(grid.boxHeight)) {
         const pieces = new Array<string>()
-        for (const col of _.range(board.size)) {
-          pieces.push(col % board.blockWidth === 0 ? '|' : ':')
+        for (const col of _.range(grid.size)) {
+          pieces.push(col % grid.boxWidth === 0 ? '|' : ':')
           const candidates = puzzle.candidates({ row, col })
-          for (const subCol of _.range(board.blockWidth)) {
-            const value = board.blockWidth * subRow + subCol
+          for (const subCol of _.range(grid.boxWidth)) {
+            const value = grid.boxWidth * subRow + subCol
             if (candidates.contains(value)) {
               pieces.push(this.markers[value].padStart(this.maxLength))
             } else {
@@ -124,16 +124,16 @@ export default class Formatter {
       }
     }
 
-    lines.push(this.formatBorderLine(board, true))
+    lines.push(this.formatBorderLine(grid, true))
     return lines.join('\n')
   }
 
-  protected formatBorderLine(board: Board, major = true): string {
+  protected formatBorderLine(grid: Grid, major = true): string {
     const gap = major ? '-' : ' '
     const fence = '+'
-    const cellLine = _.times(board.blockWidth * this.maxLength, _.constant('-')).join(gap)
-    const boardLine = _.times(board.size, _.constant(cellLine)).join(`${gap}${fence}${gap}`)
-    return `${fence}${gap}${boardLine}${gap}${fence}`
+    const cellLine = _.times(grid.boxWidth * this.maxLength, _.constant('-')).join(gap)
+    const gridLine = _.times(grid.size, _.constant(cellLine)).join(`${gap}${fence}${gap}`)
+    return `${fence}${gap}${gridLine}${gap}${fence}`
   }
 
   formatSolvingStep(step: SolvingStep, showMutations = true, indent = 0): string {
@@ -141,7 +141,7 @@ export default class Formatter {
       return [
         pluralize('cell', cells.length, inclusive),
         cells.length > 1 ? ' [' : ' ',
-        cells.map(cell => `(${cell.row + 1},${cell.col + 1})`).join(', '),
+        cells.map(cell => `r${cell.row + 1}c${cell.col + 1}`).join(', '),
         cells.length > 1 ? ']' : '',
       ].join('')
     }
@@ -177,8 +177,8 @@ export default class Formatter {
       pieces.push(' have ')
       pieces.push(formatValues(evidence.values, 'candidate'))
     } else if (evidence instanceof HiddenEvidence) {
-      pieces.push(` [${evidence.area.kind} ${evidence.area.index + 1}] `)
-      pieces.push(formatValues(evidence.values, 'candidate', false))
+      pieces.push(` [${evidence.house.kind} ${evidence.house.index + 1}] `)
+      pieces.push(formatValues(evidence.values, 'value', false))
       pieces.push(' appear in ')
       pieces.push(formatCells(evidence.cells))
     } else if (evidence instanceof LinkedEvidence) {
@@ -187,8 +187,8 @@ export default class Formatter {
       pieces.push(' appear in ')
       pieces.push(formatIndices(evidence.orthIndices, evidence.orthKind))
     } else if (evidence instanceof GuessEvidence) {
-      pieces.push(` [cell (${evidence.cell.row + 1},${evidence.cell.col + 1})] has `)
-      pieces.push(formatValues(evidence.candidates, 'candidate'))
+      pieces.push(` [cell r${evidence.cell.row + 1}c${evidence.cell.col + 1}] has `)
+      pieces.push(formatValues(evidence.candidates, 'value'))
       pieces.push(`, choose '${this.markers[evidence.value]}'`)
     }
 
@@ -202,7 +202,7 @@ export default class Formatter {
     if (showMutations) {
       for (const { cell, removed } of step.mutations) {
         pieces.push(stepPrefix)
-        pieces.push(`=> cell (${cell.row + 1},${cell.col + 1}) remove `)
+        pieces.push(`=> cell r${cell.row + 1}c${cell.col + 1} remove `)
         pieces.push(formatValues(removed, 'candidates', false))
         lines.push(pieces.join(''))
         pieces = new Array<string>()
@@ -240,12 +240,12 @@ export default class Formatter {
     }
   }
 
-  parsePuzzle(lines: Iterable<string>, board: Board): Puzzle {
-    if (board.size > this.markers.length) {
-      throw new Error(`The board is too big for this formatter (${board.size} > ${this.markers.length}).`)
+  parsePuzzle(lines: Iterable<string>, grid: Grid): Puzzle {
+    if (grid.size > this.markers.length) {
+      throw new Error(`The grid is too big for this formatter (${grid.size} > ${this.markers.length}).`)
     }
 
-    const puzzle = new Puzzle(board)
+    const puzzle = new Puzzle(grid)
 
     let row = 0
     for (const line of lines) {
@@ -270,12 +270,12 @@ export default class Formatter {
           puzzle.candidates({ row, col }).retain(this.lookup(piece))
         }
 
-        if (++col >= board.size) {
+        if (++col >= grid.size) {
           break
         }
       }
 
-      if (++row >= board.size) {
+      if (++row >= grid.size) {
         break
       }
     }

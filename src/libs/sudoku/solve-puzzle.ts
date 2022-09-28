@@ -4,7 +4,7 @@ import { program, Option } from 'commander'
 import _ from 'lodash'
 import pluralize from 'pluralize'
 
-import Board from './board'
+import Grid from './grid'
 import { DeduceRule, GuessEvidence, ParadoxError } from './deduce-info'
 import Formatter from './formatter'
 import Puzzle from './puzzle'
@@ -30,12 +30,12 @@ type StepMsgLevelStrings = keyof typeof StepMsgLevel
 program
   .argument('[puzzle-file]', 'a file contains sudoku puzzle (default to stdin)')
   .addOption(
-    new Option('--block-height <number>', 'how many rows a block contains')
+    new Option('--box-height <number>', 'how many rows a box contains')
       .default(3)
       .argParser(_.parseInt)
 )
   .addOption(
-    new Option('--block-width <number>', 'how many columns a block contains')
+    new Option('--box-width <number>', 'how many columns a box contains')
       .default(3)
       .argParser(_.parseInt)
   )
@@ -96,9 +96,9 @@ program
     }
     solver.lowerLevelFirst = options.lowerLevelFirst
 
-    const board = new Board(options.blockHeight, options.blockWidth)
+    const grid = new Grid(options.boxHeight, options.boxWidth)
     const formatter = new Formatter(options.markers)
-    const puzzle = formatter.parsePuzzle(loadPuzzleFile(puzzlePath), board)
+    const puzzle = formatter.parsePuzzle(loadPuzzleFile(puzzlePath), grid)
     console.log('The initial puzzle is:')
     console.log(formatter.formatPuzzle(puzzle))
 

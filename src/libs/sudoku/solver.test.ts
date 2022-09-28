@@ -1,6 +1,6 @@
 import fs from 'fs'
 
-import Board from './board'
+import Grid from './grid'
 import { DeduceRule } from './deduce-info'
 import Formatter from './formatter'
 import * as itertools from '../../utils/itertools'
@@ -61,11 +61,11 @@ const puzzles: Array<[string, SolverCase[]]> = [
 ]
 
 const formatter = new Formatter()
-const board = new Board()
+const grid = new Grid()
 
 describe.each(puzzles)('%s', (puzzlePath, cases) => {
   it.each(cases)('%o', options => {
-    const puzzle = formatter.parsePuzzle(loadPuzzleFile(puzzlePath), board)
+    const puzzle = formatter.parsePuzzle(loadPuzzleFile(puzzlePath), grid)
     const solver = new Solver()
     solver.maxLevels.set(DeduceRule.Naked, options.naked ?? options.allRules ?? 0)
     solver.maxLevels.set(DeduceRule.Hidden, options.hidden ?? options.allRules ?? 0)
